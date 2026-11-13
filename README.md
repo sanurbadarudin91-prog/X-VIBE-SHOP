@@ -121,5 +121,7 @@ lalu tandai pesanan lunas melalui fungsi `pay_order`.
 
 ## Deploy
 
-Lihat [`DEPLOY.md`](./DEPLOY.md) untuk panduan deploy ke Vercel (environment
-variables, konfigurasi auth Supabase, domain, dan verifikasi).
+- **Live (produksi)**: <https://x-vibe-shop.vercel.app>
+- Panduan lengkap: [`DEPLOY.md`](./DEPLOY.md) (environment variables,
+  konfigurasi auth Supabase, domain, dan verifikasi).
+- Verifikasi rute setelah deploy: `npm run check:deploy https://<domain>`.

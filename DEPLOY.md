@@ -1,5 +1,9 @@
 # Deploy X-VIBE-SHOP ke Vercel
 
+> **Status: sudah live** di <https://x-vibe-shop.vercel.app> (team
+> `x-vibe-cyber-development`, project `x-vibe-shop`, region `sin1`).
+> Bagian di bawah adalah panduan lengkap untuk deploy ulang atau project baru.
+
 Panduan langkah demi langkah. Repo sudah berisi `vercel.json`, jadi Vercel akan
 otomatis mendeteksi Next.js.
 
@@ -87,6 +91,21 @@ Untuk menguji preview secara otomatis, buat **Protection Bypass for Automation**
 di *Settings → Deployment Protection* lalu akses dengan header
 `x-vercel-protection-bypass: <secret>` atau query `?x-vercel-protection-bypass=<secret>`.
 Alternatif: setel Vercel Authentication ke *Only Production Deployments*.
+
+> **Catatan:** alamat produksi `<https://x-vibe-shop.vercel.app>` sempat
+> mengembalikan **401** saat diakses dengan `curl` biasa (perlindungan otomatis
+> Vercel terhadap request non-browser). Untuk verifikasi dari CLI/agent, pakai
+> secret bypass:
+>
+> ```bash
+> curl -H "x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET" \
+>   https://x-vibe-shop.vercel.app/
+> ```
+>
+> Di browser, alamat produksi dapat diakses normal. Jika ingin URL produksi
+> benar-benar publik tanpa syarat, setel *Vercel Authentication* ke
+> **Disabled** atau **Only Production Deployments** di
+> *Settings → Deployment Protection*.
 
 ## 8. Catatan keamanan
 
