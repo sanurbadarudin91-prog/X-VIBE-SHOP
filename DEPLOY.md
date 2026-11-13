@@ -86,26 +86,22 @@ bayar (simulasi), dan buka `/admin` sebagai admin.
 
 ## 7. Deployment Protection
 
-Preview deployment Vercel secara default dilindungi (butuh login Vercel).
-Untuk menguji preview secara otomatis, buat **Protection Bypass for Automation**
-di *Settings → Deployment Protection* lalu akses dengan header
-`x-vercel-protection-bypass: <secret>` atau query `?x-vercel-protection-bypass=<secret>`.
-Alternatif: setel Vercel Authentication ke *Only Production Deployments*.
+Alamat produksi `<https://x-vibe-shop.vercel.app>` dapat diakses publik tanpa
+autentikasi (terverifikasi: `200` baik dari `curl` maupun browser).
 
-> **Catatan:** alamat produksi `<https://x-vibe-shop.vercel.app>` sempat
-> mengembalikan **401** saat diakses dengan `curl` biasa (perlindungan otomatis
-> Vercel terhadap request non-browser). Untuk verifikasi dari CLI/agent, pakai
-> secret bypass:
->
-> ```bash
-> curl -H "x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET" \
->   https://x-vibe-shop.vercel.app/
-> ```
->
-> Di browser, alamat produksi dapat diakses normal. Jika ingin URL produksi
-> benar-benar publik tanpa syarat, setel *Vercel Authentication* ke
-> **Disabled** atau **Only Production Deployments** di
-> *Settings → Deployment Protection*.
+Preview deployment Vercel dapat dilindungi (butuh login Vercel). Untuk menguji
+preview secara otomatis, buat **Protection Bypass for Automation** di
+*Settings → Deployment Protection* lalu akses dengan header
+`x-vercel-protection-bypass: <secret>` atau query
+`?x-vercel-protection-bypass=<secret>`:
+
+```bash
+curl -H "x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET" \
+  https://<preview-url>.vercel.app/
+```
+
+Jika ingin mematikan proteksi pada preview, setel *Vercel Authentication* ke
+**Only Production Deployments** atau **Disabled**.
 
 ## 8. Catatan keamanan
 
