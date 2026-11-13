@@ -118,3 +118,8 @@ lalu tandai pesanan lunas melalui fungsi `pay_order`.
 - `.env.local` tidak ikut di-commit (lihat `.gitignore`); jangan pernah
   menaruh service-role key di kode client.
 - Semua penulisan data sensitif divalidasi di sisi server dan dilindungi RLS.
+
+## Deploy
+
+Lihat [`DEPLOY.md`](./DEPLOY.md) untuk panduan deploy ke Vercel (environment
+variables, konfigurasi auth Supabase, domain, dan verifikasi).

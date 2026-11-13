@@ -10,7 +10,13 @@ npm run dev        # dev server (http://localhost:3000)
 npm run build      # build produksi
 npm run lint       # ESLint (next lint)
 npm run typecheck  # tsc --noEmit
+npm run check:deploy [url]  # verifikasi rute setelah deploy
 ```
+
+## Deploy
+
+Konfigurasi Vercel ada di `vercel.json`; panduan lengkap di `DEPLOY.md`.
+Region produksi: `sin1` (Singapura) agar dekat Supabase `ap-southeast-2`.
 
 ## Struktur
 
