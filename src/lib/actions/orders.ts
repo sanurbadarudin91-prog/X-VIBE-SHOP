@@ -2,9 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { computeDiscount } from "@/lib/vouchers";
-import { generateOrderReference, generateVirtualAccount } from "@/lib/utils";
-import type { OrderStatus, ShippingAddress, Voucher } from "@/lib/types";
+import type { OrderStatus, ShippingAddress } from "@/lib/types";
 import type { ActionResult } from "./cart";
 
 export interface CheckoutInput {
@@ -13,19 +11,20 @@ export interface CheckoutInput {
   paymentMethod: "bank_transfer" | "qris" | "ewallet";
 }
 
-/** Baris cart_items beserta relasi products yang di-embed PostgREST. */
-interface CartRow {
-  id: string;
-  quantity: number;
-  product_id: string;
-  products: { id: string; title: string; price: number; stock: number } | null;
-}
-
 export interface CheckoutResult extends ActionResult {
   orderId?: string;
   paymentReference?: string;
   virtualAccount?: string;
 }
+
+/** Transisi status pesanan yang sah untuk admin (fulfillment). */
+const ADMIN_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
+  pending: ["paid", "cancelled"],
+  paid: ["shipped", "completed", "cancelled"],
+  shipped: ["completed", "cancelled"],
+  completed: [],
+  cancelled: [],
+};
 
 export async function createOrder(input: CheckoutInput): Promise<CheckoutResult> {
   const supabase = await createClient();
@@ -34,88 +33,25 @@ export async function createOrder(input: CheckoutInput): Promise<CheckoutResult>
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, message: "Silakan login terlebih dahulu." };
 
-  const { data: cartData } = await supabase
-    .from("cart_items")
-    .select("id, quantity, product_id, products(id, title, price, stock)")
-    .eq("user_id", user.id);
+  // Pembuatan pesanan dijalankan atomik di database (validasi stok, voucher,
+  // total, order_items, dan pengosongan keranjang) via RPC security-definer.
+  const { data, error } = await supabase.rpc("create_order", {
+    p_address: input.address,
+    p_payment_method: input.paymentMethod,
+    p_user_voucher_id: input.userVoucherId,
+  });
 
-  const cart = (cartData ?? []) as unknown as CartRow[];
+  if (error) return { ok: false, message: error.message };
 
-  if (cart.length === 0)
-    return { ok: false, message: "Keranjang Anda kosong." };
+  const row = (Array.isArray(data) ? data[0] : data) as
+    | { order_id: string; payment_reference: string }
+    | undefined;
+  if (!row?.order_id)
+    return { ok: false, message: "Gagal membuat pesanan." };
 
-  // Validasi stok & hitung subtotal dari harga di server (bukan dari client).
-  let subtotal = 0;
-  for (const item of cart) {
-    const product = item.products;
-    if (!product) return { ok: false, message: "Ada produk yang tidak valid." };
-    if (item.quantity > product.stock)
-      return {
-        ok: false,
-        message: `Stok "${product.title}" tidak mencukupi (tersisa ${product.stock}).`,
-      };
-    subtotal += Number(product.price) * item.quantity;
-  }
-
-  // Hitung diskon voucher di server.
-  let discount = 0;
-  let userVoucherId: string | null = null;
-  if (input.userVoucherId) {
-    const { data: uv } = await supabase
-      .from("user_vouchers")
-      .select("id, is_used, vouchers(id, discount_type, discount_value, min_purchase, is_active, expiry_date)")
-      .eq("id", input.userVoucherId)
-      .eq("user_id", user.id)
-      .single();
-
-    const voucher = (uv as { vouchers: Voucher | null } | null)?.vouchers;
-    if (uv && !uv.is_used && voucher) {
-      discount = computeDiscount(subtotal, voucher);
-      if (discount > 0) userVoucherId = uv.id;
-    }
-  }
-
-  const total = Math.max(subtotal - discount, 0);
-  const paymentReference = generateOrderReference();
+  const [reference, vaPart] = row.payment_reference.split("|VA:");
   const virtualAccount =
-    input.paymentMethod === "bank_transfer" ? generateVirtualAccount() : undefined;
-
-  const { data: order, error: orderError } = await supabase
-    .from("orders")
-    .insert({
-      user_id: user.id,
-      total_amount: total,
-      status: "pending",
-      shipping_address_json: input.address,
-      payment_reference: virtualAccount
-        ? `${paymentReference}|VA:${virtualAccount}`
-        : paymentReference,
-    })
-    .select("id")
-    .single();
-
-  if (orderError || !order)
-    return { ok: false, message: orderError?.message ?? "Gagal membuat pesanan." };
-
-  const orderItems = cart.map((item) => ({
-    order_id: order.id,
-    product_id: item.product_id,
-    quantity: item.quantity,
-    price_at_purchase: Number(item.products?.price ?? 0),
-  }));
-
-  const { error: itemsError } = await supabase.from("order_items").insert(orderItems);
-  if (itemsError) return { ok: false, message: itemsError.message };
-
-  if (userVoucherId) {
-    await supabase
-      .from("user_vouchers")
-      .update({ is_used: true })
-      .eq("id", userVoucherId)
-      .eq("user_id", user.id);
-  }
-
-  await supabase.from("cart_items").delete().eq("user_id", user.id);
+    input.paymentMethod === "bank_transfer" ? vaPart : undefined;
 
   revalidatePath("/cart");
   revalidatePath("/orders");
@@ -124,8 +60,8 @@ export async function createOrder(input: CheckoutInput): Promise<CheckoutResult>
   return {
     ok: true,
     message: "Pesanan berhasil dibuat.",
-    orderId: order.id,
-    paymentReference,
+    orderId: row.order_id,
+    paymentReference: reference,
     virtualAccount,
   };
 }
@@ -197,6 +133,21 @@ export async function updateOrderStatus(
     .single();
   if (profile?.role !== "admin")
     return { ok: false, message: "Akses ditolak. Hanya admin." };
+
+  const { data: order } = await supabase
+    .from("orders")
+    .select("status")
+    .eq("id", orderId)
+    .single();
+
+  if (!order) return { ok: false, message: "Pesanan tidak ditemukan." };
+  if (order.status === status)
+    return { ok: true, message: "Status pesanan tidak berubah." };
+  if (!ADMIN_TRANSITIONS[order.status as OrderStatus].includes(status))
+    return {
+      ok: false,
+      message: "Perubahan status tidak diizinkan dari status saat ini.",
+    };
 
   const { error } = await supabase
     .from("orders")

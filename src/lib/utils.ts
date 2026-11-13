@@ -22,13 +22,3 @@ export function formatDate(value: string | Date) {
     timeStyle: "short",
   }).format(d);
 }
-
-export function generateOrderReference() {
-  const stamp = Date.now().toString(36).toUpperCase();
-  const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
-  return `XV-${stamp}-${rand}`;
-}
-
-export function generateVirtualAccount() {
-  return `8808${Math.floor(100000000 + Math.random() * 899999999)}`;
-}

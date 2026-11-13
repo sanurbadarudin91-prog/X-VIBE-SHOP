@@ -36,21 +36,3 @@ export async function claimVoucher(voucherId: string): Promise<ActionResult> {
   return { ok: true, message: "Voucher berhasil diklaim." };
 }
 
-export async function markVoucherUsed(
-  userVoucherId: string,
-): Promise<ActionResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, message: "Tidak terautentikasi." };
-
-  const { error } = await supabase
-    .from("user_vouchers")
-    .update({ is_used: true })
-    .eq("id", userVoucherId)
-    .eq("user_id", user.id);
-
-  if (error) return { ok: false, message: error.message };
-  return { ok: true, message: "Voucher ditandai terpakai." };
-}

@@ -330,6 +330,109 @@ begin
 end;
 $$;
 
+-- Buat pesanan dari keranjang secara atomik: validasi stok & voucher, hitung
+-- total dari harga di server, simpan order + order_items, tandai voucher
+-- terpakai, lalu kosongkan keranjang. Dijalankan security definer agar aman
+-- dari race condition dan tidak bergantung RLS tulis tabel orders.
+create or replace function public.create_order(
+  p_address jsonb,
+  p_payment_method text,
+  p_user_voucher_id uuid default null
+)
+returns table (order_id uuid, payment_reference text)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_subtotal numeric := 0;
+  v_discount numeric := 0;
+  v_total numeric := 0;
+  v_order_id uuid;
+  v_reference text;
+  v_voucher record;
+  v_voucher_id uuid;
+  r record;
+begin
+  if v_uid is null then
+    raise exception 'Silakan login terlebih dahulu';
+  end if;
+
+  if not exists (select 1 from public.cart_items where user_id = v_uid) then
+    raise exception 'Keranjang Anda kosong';
+  end if;
+
+  -- Kunci baris produk yang relevan untuk mencegah perebutan stok.
+  perform 1
+     from public.products p
+     join public.cart_items c on c.product_id = p.id
+    where c.user_id = v_uid
+    for update of p;
+
+  for r in
+    select p.title, p.price, p.stock, c.quantity
+      from public.cart_items c
+      join public.products p on p.id = c.product_id
+     where c.user_id = v_uid
+  loop
+    if r.quantity > r.stock then
+      raise exception 'Stok "%" tidak mencukupi (tersisa %)', r.title, r.stock;
+    end if;
+    v_subtotal := v_subtotal + r.price * r.quantity;
+  end loop;
+
+  if p_user_voucher_id is not null then
+    select uv.id, v.discount_type, v.discount_value, v.min_purchase, v.is_active,
+           v.expiry_date
+      into v_voucher
+      from public.user_vouchers uv
+      join public.vouchers v on v.id = uv.voucher_id
+     where uv.id = p_user_voucher_id
+       and uv.user_id = v_uid
+       and uv.is_used = false
+       and v.is_active = true
+       and (v.expiry_date is null or v.expiry_date >= now());
+
+    if found and v_subtotal >= v_voucher.min_purchase then
+      if v_voucher.discount_type = 'percentage' then
+        v_discount := round(v_subtotal * v_voucher.discount_value / 100);
+      else
+        v_discount := v_voucher.discount_value;
+      end if;
+      v_discount := least(v_discount, v_subtotal);
+      v_voucher_id := v_voucher.id;
+    end if;
+  end if;
+
+  v_total := greatest(v_subtotal - v_discount, 0);
+  v_reference := 'XV-' || upper(substr(md5(random()::text || clock_timestamp()::text), 1, 10));
+  -- Placeholder gateway: sertakan nomor Virtual Account untuk transfer bank.
+  if p_payment_method = 'bank_transfer' then
+    v_reference := v_reference || '|VA:8808' ||
+      lpad((floor(random() * 1000000000))::bigint::text, 9, '0');
+  end if;
+
+  insert into public.orders (user_id, total_amount, status, shipping_address_json, payment_reference)
+  values (v_uid, v_total, 'pending', p_address, v_reference)
+  returning id into v_order_id;
+
+  insert into public.order_items (order_id, product_id, quantity, price_at_purchase)
+  select v_order_id, c.product_id, c.quantity, p.price
+    from public.cart_items c
+    join public.products p on p.id = c.product_id
+   where c.user_id = v_uid;
+
+  if v_voucher_id is not null then
+    update public.user_vouchers set is_used = true where id = v_voucher_id;
+  end if;
+
+  delete from public.cart_items where user_id = v_uid;
+
+  return query select v_order_id, v_reference;
+end;
+$$;
+
 -- ============================================================================
 -- ROW LEVEL SECURITY
 -- ============================================================================
@@ -460,3 +563,10 @@ create policy "storage_admin_write_products" on storage.objects
 grant usage on schema public to anon, authenticated;
 grant all on all tables in schema public to anon, authenticated, service_role;
 grant all on all sequences in schema public to anon, authenticated, service_role;
+
+-- Fungsi RPC (dipanggil aplikasi) hanya untuk pengguna terautentikasi.
+grant execute on function public.create_order(jsonb, text, uuid) to authenticated;
+grant execute on function public.pay_order(uuid) to authenticated;
+grant execute on function public.cancel_order(uuid) to authenticated;
+grant execute on function public.decrement_stock_for_order(uuid) to authenticated;
+grant execute on function public.restore_stock_for_order(uuid) to authenticated;
