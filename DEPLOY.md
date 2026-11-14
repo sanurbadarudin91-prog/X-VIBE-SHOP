@@ -25,10 +25,26 @@ repo.
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | `sb_publishable_...` | publik, dilindungi RLS |
 | `SUPABASE_SECRET_KEY` | `sb_secret_...` | **rahasia**, hanya server |
 | `NEXT_PUBLIC_SITE_URL` | `https://<domain>.vercel.app` | isi setelah domain diketahui |
-| `PAYMENT_PROVIDER` | `mock` | placeholder |
-| `PAYMENT_SERVER_KEY` | (kosong) | untuk gateway sungguhan nanti |
+| `MIDTRANS_SERVER_KEY` | `Mid-server-...` / `SB-Mid-server-...` | **rahasia**, hanya server |
+| `NEXT_PUBLIC_MIDTRANS_CLIENT_KEY` | `Mid-client-...` / `SB-Mid-client-...` | publik, dipakai Snap.js |
+| `MIDTRANS_IS_PRODUCTION` | `false` | `true` hanya untuk produksi Midtrans |
+| `PAYMENT_PROVIDER` | `midtrans` | penanda gateway aktif |
 
 > Setelah mengubah env var, lakukan **Redeploy** agar berlaku.
+
+### Webhook Midtrans
+
+Daftarkan URL notifikasi di **Midtrans → Settings → Configuration → Payment
+Notification URL**:
+
+```
+https://<domain>.vercel.app/api/payment/midtrans/webhook
+```
+
+Webhook memverifikasi signature `sha512(order_id + status_code + gross_amount +
+serverKey)` lalu memperbarui status pesanan lewat RPC `service_role`
+(idempotent). Pesanan bertanda `paid` otomatis mengurangi stok; `cancel`/`deny`/
+`expire` membatalkan pesanan dan memulihkan stok bila sudah lunas.
 
 ## 3. Import project
 
@@ -48,6 +64,9 @@ vercel env add NEXT_PUBLIC_SUPABASE_URL
 vercel env add NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 vercel env add SUPABASE_SECRET_KEY
 vercel env add NEXT_PUBLIC_SITE_URL
+vercel env add MIDTRANS_SERVER_KEY
+vercel env add NEXT_PUBLIC_MIDTRANS_CLIENT_KEY
+vercel env add MIDTRANS_IS_PRODUCTION
 vercel --prod          # deploy produksi
 ```
 

@@ -14,7 +14,7 @@ cyberpunk. Dibangun dengan **Next.js 15 (App Router)** + **Supabase**
 - Klaim & penerapan **voucher** (diskon fixed/percentage, minimum belanja)
 - Checkout: pilih alamat, metode bayar (Transfer Bank VA / QRIS / e-wallet),
   pembuatan pesanan + referensi pembayaran
-- Riwayat pesanan + simulasi pembayaran + pembatalan
+- Riwayat pesanan + pembayaran online (Midtrans Snap) + pembatalan
 - Profil: ubah data diri, upload avatar, dan kelola multi-alamat (satu default)
 
 **Admin (`/admin`)**
@@ -31,11 +31,12 @@ src/
     (shop)/            # route group toko: /, /products, /cart, /checkout,
                        #   /orders, /vouchers, /profile, /login
     admin/             # dashboard admin (dilindungi peran admin)
-    api/payment/       # placeholder webhook payment gateway
+    api/payment/midtrans/webhook/  # webhook notifikasi Midtrans
     auth/callback/     # callback OAuth
   components/          # UI (shadcn-style) + fitur per-domain
   lib/
     supabase/          # client (browser), server, admin, middleware
+    payments/          # helper server-side Midtrans (Snap + signature)
     actions/           # Next.js Server Actions (cart, orders, addresses, admin, vouchers)
     queries.ts         # pembacaan data (server-side)
     types.ts           # tipe domain
@@ -106,12 +107,27 @@ dijalankan melalui fungsi Postgres `security definer` agar tetap aman:
 | `npm start` | Jalankan hasil build |
 | `npm run lint` | ESLint |
 | `npm run typecheck` | `tsc --noEmit` |
+| `npm run verify:midtrans` | Uji signature & pemetaan status Midtrans |
 
-## Catatan pembayaran
+## Pembayaran (Midtrans Snap)
 
-Endpoint `src/app/api/payment/route.ts` masih berupa placeholder. Untuk
-produksi, ganti dengan webhook gateway (Midtrans/Xendit): verifikasi signature
-lalu tandai pesanan lunas melalui fungsi `pay_order`.
+Tombol **Bayar Sekarang** pada kartu pesanan memanggil Server Action
+`createSnapSession`, yang membuat transaksi Snap di server
+(`src/lib/payments/midtrans.ts`) dan menyimpan token ke `orders`. Popup Snap
+dibuka di browser memakai client key publik.
+
+Status pesanan diperbarui oleh webhook
+`src/app/api/payment/midtrans/webhook/route.ts`, yang:
+
+1. memverifikasi signature `sha512(order_id + status_code + gross_amount +
+   serverKey)`,
+2. mencocokkan nominal notifikasi dengan `orders.total_amount`,
+3. memanggil RPC `service_role` `mark_order_paid_from_gateway` /
+   `mark_order_cancelled_from_gateway` (idempotent).
+
+Set env `MIDTRANS_SERVER_KEY`, `NEXT_PUBLIC_MIDTRANS_CLIENT_KEY`, dan
+`MIDTRANS_IS_PRODUCTION` (lihat [`DEPLOY.md`](./DEPLOY.md)), lalu daftarkan URL
+webhook di dashboard Midtrans.
 
 ## Keamanan
 

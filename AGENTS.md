@@ -45,3 +45,22 @@ Region produksi: `sin1` (Singapura) agar dekat Supabase `ap-southeast-2`.
 
 `pending → paid → shipped → completed`, dengan `cancelled` sebagai cabang.
 Transisi divalidasi di `ADMIN_TRANSITIONS` (`src/lib/actions/orders.ts`).
+
+## Pembayaran (Midtrans)
+
+- Helper server-side: `src/lib/payments/midtrans.ts` (Snap, signature sha512,
+  pemetaan status). Env: `MIDTRANS_SERVER_KEY`, `NEXT_PUBLIC_MIDTRANS_CLIENT_KEY`,
+  `MIDTRANS_IS_PRODUCTION`.
+- Server Action `createSnapSession` (di `src/lib/actions/orders.ts`) membuat
+  transaksi Snap dan menyimpan token via RPC `set_order_payment_token`.
+- Webhook: `src/app/api/payment/midtrans/webhook/route.ts` — verifikasi
+  signature + nominal, lalu panggil RPC service_role.
+- `order_id` Midtrans berformat `XV-<uuid pesanan>`; webhook mengembalikan
+  prefix sebelum mencari pesanan.
+- Stok diubah lewat helper internal `apply_stock_delta` (tanpa cek `auth.uid()`)
+  karena webhook tidak punya sesi pengguna. `apply_stock_delta` sengaja
+  **tidak** di-grant ke anon/authenticated.
+- Uji cepat: `npm run verify:midtrans` (signature + pemetaan status).
+- Terapkan `supabase/schema.sql` ke DB setelah mengubahnya (idempoten). DB pooler:
+  `postgres.<ref>@aws-0-ap-southeast-2.pooler.supabase.com:5432` (kredensial tidak
+  disimpan di repo).
