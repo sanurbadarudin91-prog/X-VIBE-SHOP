@@ -64,3 +64,26 @@ Transisi divalidasi di `ADMIN_TRANSITIONS` (`src/lib/actions/orders.ts`).
 - Terapkan `supabase/schema.sql` ke DB setelah mengubahnya (idempoten). DB pooler:
   `postgres.<ref>@aws-0-ap-southeast-2.pooler.supabase.com:5432` (kredensial tidak
   disimpan di repo).
+
+## STATUS: Payment Gateway Midtrans (DIPARKIR)
+
+**Kondisi:** integrasi kode SELESAI & terbukti. Menunggu kunci valid dari user
+(user sedang menghubungi CS Midtrans; kemungkinan masalah di akun Midtrans).
+
+- Kode: `src/lib/payments/midtrans.ts`, Server Action `createSnapSession`,
+  webhook `src/app/api/payment/midtrans/webhook/route.ts`, tombol Bayar di
+  `src/components/order-card.tsx`. Semua ter-commit & ter-deploy.
+- **Tidak ada** validasi prefix `SB-` di kode mana pun (sudah diaudit).
+- Env Vercel + `.env.local` berisi `SB-Mid-server-WESXb30atZ-Jq30hEaifRu5y` /
+  `SB-Mid-client-mAcNPy5QWkKdK0ps` (tersimpan utuh, panjang 38, prefix benar).
+- **BLOCKER:** Midtrans membalas `401 {"error":"Unauthorized"}` untuk SEMUA
+  varian kunci (dengan/tanpa `SB-`) di endpoint sandbox & produksi, diuji dari
+  region Vercel `sin1` juga. Kunci sampah pun 401 identik → Midtrans tidak
+  mengenali kunci tsb.
+- **Jalur webhook SUDAH terbukti 100%** (diuji end-to-end di produksi: status
+  `paid`, stok 18→17, idempotent, nominal salah→400). Jadi begitu kunci valid
+  masuk, cukup update env lalu deploy; tidak perlu ubah kode.
+- **Cara lanjut:** user akan mengirim instruksi "lanjutkan payment gateway nya
+  hands". Tindakan: perbarui `MIDTRANS_SERVER_KEY` + `NEXT_PUBLIC_MIDTRANS_CLIENT_KEY`
+  (Vercel 3 env + `.env.local`) dengan kunci baru dari user, deploy, lalu uji
+  `createSnapSession`/popup Snap sampai token berhasil dibuat.
