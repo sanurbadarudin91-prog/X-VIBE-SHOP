@@ -6,6 +6,7 @@ import {
   ShoppingCart,
   Store,
   TicketPercent,
+  Users,
 } from "lucide-react";
 import { getProfile } from "@/lib/queries";
 
@@ -13,6 +14,7 @@ const NAV = [
   { href: "/admin", label: "Ringkasan", icon: LayoutDashboard },
   { href: "/admin/products", label: "Produk", icon: Package },
   { href: "/admin/orders", label: "Pesanan", icon: ShoppingCart },
+  { href: "/admin/customers", label: "Pelanggan", icon: Users },
   { href: "/admin/vouchers", label: "Voucher", icon: TicketPercent },
 ];
 

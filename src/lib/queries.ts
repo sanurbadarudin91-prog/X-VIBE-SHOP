@@ -1,8 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import type {
   Address,
   CartItem,
   Order,
+  OrderStatus,
   Product,
   Profile,
   UserVoucher,
@@ -181,31 +183,165 @@ export interface AdminStats {
   pendingCount: number;
   customerCount: number;
   productCount: number;
+  averageOrderValue: number;
+  statusCounts: Record<OrderStatus, number>;
 }
+
+const REVENUE_STATUSES: OrderStatus[] = ["paid", "shipped", "completed"];
 
 export async function getAdminStats(): Promise<AdminStats> {
   const supabase = await createClient();
 
-  const [paidOrders, allOrders, pending, customers, products] = await Promise.all([
-    supabase.from("orders").select("total_amount").in("status", ["paid", "shipped", "completed"]),
-    supabase.from("orders").select("id", { count: "exact", head: true }),
-    supabase.from("orders").select("id", { count: "exact", head: true }).eq("status", "pending"),
+  const [orders, customers, products] = await Promise.all([
+    supabase.from("orders").select("status, total_amount"),
     supabase.from("profiles").select("id", { count: "exact", head: true }).eq("role", "customer"),
     supabase.from("products").select("id", { count: "exact", head: true }),
   ]);
 
-  const revenue = (paidOrders.data ?? []).reduce(
-    (sum, r: { total_amount: number }) => sum + Number(r.total_amount),
-    0,
-  );
+  const rows = (orders.data ?? []) as { status: OrderStatus; total_amount: number }[];
+
+  const statusCounts: Record<OrderStatus, number> = {
+    pending: 0,
+    paid: 0,
+    shipped: 0,
+    completed: 0,
+    cancelled: 0,
+  };
+  for (const r of rows) statusCounts[r.status] = (statusCounts[r.status] ?? 0) + 1;
+
+  const revenue = rows
+    .filter((r) => REVENUE_STATUSES.includes(r.status))
+    .reduce((sum, r) => sum + Number(r.total_amount), 0);
+  const paidOrderCount = REVENUE_STATUSES.reduce((sum, s) => sum + statusCounts[s], 0);
 
   return {
     revenue,
-    orderCount: allOrders.count ?? 0,
-    pendingCount: pending.count ?? 0,
+    orderCount: rows.length,
+    pendingCount: statusCounts.pending,
     customerCount: customers.count ?? 0,
     productCount: products.count ?? 0,
+    averageOrderValue: paidOrderCount ? revenue / paidOrderCount : 0,
+    statusCounts,
   };
+}
+
+export interface RevenuePoint {
+  date: string;
+  label: string;
+  total: number;
+}
+
+/** Total pendapatan harian (pesanan lunas/dikirim/selesai) untuk `days` hari terakhir. */
+export async function getRevenueSeries(days = 7): Promise<RevenuePoint[]> {
+  const supabase = await createClient();
+
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - (days - 1));
+
+  const { data } = await supabase
+    .from("orders")
+    .select("total_amount, created_at")
+    .in("status", REVENUE_STATUSES)
+    .gte("created_at", start.toISOString());
+
+  const buckets = new Map<string, number>();
+  for (let i = 0; i < days; i++) {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    buckets.set(d.toISOString().slice(0, 10), 0);
+  }
+
+  for (const r of (data ?? []) as { total_amount: number; created_at: string }[]) {
+    const key = new Date(r.created_at).toISOString().slice(0, 10);
+    if (buckets.has(key)) buckets.set(key, (buckets.get(key) ?? 0) + Number(r.total_amount));
+  }
+
+  return Array.from(buckets.entries()).map(([date, total]) => ({
+    date,
+    label: new Intl.DateTimeFormat("id-ID", { weekday: "short" }).format(new Date(date)),
+    total,
+  }));
+}
+
+export async function getLowStockProducts(threshold = 5): Promise<Product[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("products")
+    .select("*")
+    .lte("stock", threshold)
+    .order("stock", { ascending: true })
+    .limit(10);
+  return (data as Product[]) ?? [];
+}
+
+export interface AdminCustomer {
+  id: string;
+  full_name: string | null;
+  phone: string | null;
+  email: string | null;
+  created_at: string;
+  orderCount: number;
+  totalSpent: number;
+  lastOrderAt: string | null;
+}
+
+export async function getAdminCustomers(): Promise<AdminCustomer[]> {
+  const supabase = await createClient();
+
+  const [profilesRes, ordersRes] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("id, full_name, phone, created_at")
+      .eq("role", "customer")
+      .order("created_at", { ascending: false }),
+    supabase.from("orders").select("user_id, total_amount, status, created_at"),
+  ]);
+
+  // Email hanya ada di auth.users; ambil lewat service_role bila tersedia.
+  const emailById = new Map<string, string>();
+  try {
+    const admin = createAdminClient();
+    const { data } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    for (const u of data?.users ?? []) {
+      if (u.email) emailById.set(u.id, u.email);
+    }
+  } catch {
+    // Diamkan: email bersifat pelengkap.
+  }
+
+  const stats = new Map<string, { count: number; spent: number; last: string | null }>();
+  for (const o of (ordersRes.data ?? []) as {
+    user_id: string;
+    total_amount: number;
+    status: OrderStatus;
+    created_at: string;
+  }[]) {
+    const cur = stats.get(o.user_id) ?? { count: 0, spent: 0, last: null };
+    cur.count += 1;
+    if (REVENUE_STATUSES.includes(o.status)) cur.spent += Number(o.total_amount);
+    if (!cur.last || o.created_at > cur.last) cur.last = o.created_at;
+    stats.set(o.user_id, cur);
+  }
+
+  return ((profilesRes.data ?? []) as {
+    id: string;
+    full_name: string | null;
+    phone: string | null;
+    created_at: string;
+  }[]).map((p) => {
+    const s = stats.get(p.id);
+    return {
+      id: p.id,
+      full_name: p.full_name,
+      phone: p.phone,
+      email: emailById.get(p.id) ?? null,
+      created_at: p.created_at,
+      orderCount: s?.count ?? 0,
+      totalSpent: s?.spent ?? 0,
+      lastOrderAt: s?.last ?? null,
+    };
+  });
 }
 
 export async function getAdminVouchers(): Promise<Voucher[]> {
@@ -224,7 +360,6 @@ export async function getAdminOrders(): Promise<Order[]> {
     .from("orders")
     .select("*, order_items(*, products(title, image_url))")
     .order("created_at", { ascending: false });
-
   if (error || !data) return [];
 
   const orders = data as Order[];

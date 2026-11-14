@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Save, Trash2 } from "lucide-react";
+import { Plus, Save, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -30,6 +30,20 @@ export function ProductManager({ products }: { products: Product[] }) {
   const [editing, setEditing] = useState<Product | null>(null);
   const [form, setForm] = useState<ProductInput>(EMPTY);
   const [pending, startTransition] = useTransition();
+  const [q, setQ] = useState("");
+  const [lowOnly, setLowOnly] = useState(false);
+
+  const filtered = useMemo(() => {
+    const term = q.trim().toLowerCase();
+    return products.filter((p) => {
+      if (lowOnly && p.stock > 5) return false;
+      if (!term) return true;
+      return (
+        p.title.toLowerCase().includes(term) ||
+        p.category.toLowerCase().includes(term)
+      );
+    });
+  }, [products, q, lowOnly]);
 
   function openCreate() {
     setEditing(null);
@@ -86,6 +100,28 @@ export function ProductManager({ products }: { products: Product[] }) {
         </Button>
       </div>
 
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="relative max-w-sm flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Cari produk atau kategori..."
+            className="pl-9"
+            aria-label="Cari produk"
+          />
+        </div>
+        <label className="flex items-center gap-2 text-sm text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={lowOnly}
+            onChange={(e) => setLowOnly(e.target.checked)}
+            className="h-4 w-4 accent-primary"
+          />
+          Hanya stok menipis (≤ 5)
+        </label>
+      </div>
+
       <Card className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="border-b border-border text-left text-muted-foreground">
@@ -98,7 +134,14 @@ export function ProductManager({ products }: { products: Product[] }) {
             </tr>
           </thead>
           <tbody>
-            {products.map((p) => (
+            {filtered.length === 0 && (
+              <tr>
+                <td colSpan={5} className="p-8 text-center text-muted-foreground">
+                  Tidak ada produk yang cocok.
+                </td>
+              </tr>
+            )}
+            {filtered.map((p) => (
               <tr key={p.id} className="border-b border-border/60 last:border-0">
                 <td className="max-w-xs p-3">
                   <p className="truncate font-medium">{p.title}</p>
