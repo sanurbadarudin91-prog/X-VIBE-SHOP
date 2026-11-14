@@ -47,8 +47,9 @@ export async function addToCart(
       ? Number(p.variant_stock[variantColor])
       : p.stock;
 
-  // Keranjang unik per (user, produk, warna). Filter warna eksplisit agar
-  // produk tanpa varian (NULL) tetap ketemu.
+  // Keranjang unik per (user, produk, warna). Kolom `variant_color` hanya
+  // disentuh bila memang ada warna terpilih, agar tetap jalan di DB yang belum
+  // menjalankan migrasi varian.
   const existingQuery = supabase
     .from("cart_items")
     .select("id, quantity")
@@ -56,7 +57,7 @@ export async function addToCart(
     .eq("product_id", productId);
   const { data: existing } = await (variantColor
     ? existingQuery.eq("variant_color", variantColor)
-    : existingQuery.is("variant_color", null)
+    : existingQuery
   ).maybeSingle();
 
   const newQty = (existing?.quantity ?? 0) + quantity;
@@ -75,7 +76,7 @@ export async function addToCart(
         user_id: user.id,
         product_id: productId,
         quantity,
-        variant_color: variantColor,
+        ...(variantColor ? { variant_color: variantColor } : {}),
       });
 
   if (error) return { ok: false, message: error.message };
@@ -96,24 +97,30 @@ export async function updateCartQuantity(
 
   const { data: item } = await supabase
     .from("cart_items")
-    .select("product_id, variant_color, products(*)")
+    .select("product_id, products(*)")
     .eq("id", cartItemId)
     .eq("user_id", user.id)
     .single();
 
+  // Warna dibaca terpisah: bila kolom `variant_color` belum ada (migrasi belum
+  // jalan), pembacaan gagal dan cukup dianggap tanpa varian.
+  let variantColor: string | null = null;
+  const vc = await supabase
+    .from("cart_items")
+    .select("variant_color")
+    .eq("id", cartItemId)
+    .single();
+  if (!vc.error)
+    variantColor = (vc.data as { variant_color: string | null } | null)?.variant_color ?? null;
+
   const row = item as
-    | {
-        variant_color: string | null;
-        products: {
-          stock: number;
-          variant_stock: Record<string, number> | null;
-        } | null;
-      }
+    | { products: { stock: number; variant_stock?: Record<string, number> | null } | null }
     | null;
 
+  const variantStock = row?.products?.variant_stock;
   const stock =
-    row?.variant_color && row.products?.variant_stock?.[row.variant_color] != null
-      ? Number(row.products.variant_stock[row.variant_color])
+    variantColor && variantStock?.[variantColor] != null
+      ? Number(variantStock[variantColor])
       : row?.products?.stock ?? 0;
 
   if (quantity > stock)
