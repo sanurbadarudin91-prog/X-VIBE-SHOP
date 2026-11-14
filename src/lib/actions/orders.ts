@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createSnapTransaction, isConfigured } from "@/lib/payments/midtrans";
 import type { OrderStatus, ShippingAddress } from "@/lib/types";
 import type { ActionResult } from "./cart";
 
@@ -67,8 +68,7 @@ export async function createOrder(input: CheckoutInput): Promise<CheckoutResult>
 }
 
 /**
- * Simulasi pembayaran: menandai pesanan sebagai 'paid' dan mengurangi stok.
- * Di produksi, ini digantikan oleh webhook dari payment gateway.
+ * Simulasi pembayaran (mode dev tanpa gateway): menandai pesanan 'paid'.
  */
 export async function simulatePayment(orderId: string): Promise<ActionResult> {
   const supabase = await createClient();
@@ -98,6 +98,91 @@ export async function simulatePayment(orderId: string): Promise<ActionResult> {
   revalidatePath("/orders");
   revalidatePath("/");
   return { ok: true, message: "Pembayaran berhasil disimulasikan. Pesanan ditandai Lunas." };
+}
+
+export interface SnapSessionResult extends ActionResult {
+  token?: string;
+  redirectUrl?: string;
+}
+
+/**
+ * Membuat sesi pembayaran Midtrans Snap untuk sebuah pesanan milik pengguna.
+ * Hanya pesanan berstatus 'pending' yang dapat dibayar.
+ */
+export async function createSnapSession(
+  orderId: string,
+): Promise<SnapSessionResult> {
+  if (!isConfigured())
+    return { ok: false, message: "Payment gateway belum dikonfigurasi." };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, message: "Silakan login terlebih dahulu." };
+
+  const { data: order } = await supabase
+    .from("orders")
+    .select(
+      "id, status, total_amount, order_items(quantity, price_at_purchase, products(title))",
+    )
+    .eq("id", orderId)
+    .eq("user_id", user.id)
+    .single();
+
+  if (!order) return { ok: false, message: "Pesanan tidak ditemukan." };
+  if (order.status !== "pending")
+    return { ok: false, message: "Pesanan sudah dibayar atau diproses." };
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("full_name, phone")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  type ItemRow = {
+    quantity: number;
+    price_at_purchase: number;
+    products: { title: string } | null;
+  };
+  const items = (order.order_items as unknown as ItemRow[] | null) ?? [];
+
+  try {
+    const tx = await createSnapTransaction({
+      orderId: order.id,
+      grossAmount: Number(order.total_amount),
+      items: items.map((it, idx) => ({
+        id: `${order.id}-${idx}`,
+        name: it.products?.title ?? "Produk",
+        price: Number(it.price_at_purchase),
+        quantity: it.quantity,
+      })),
+      customer: {
+        first_name: profile?.full_name ?? undefined,
+        email: user.email ?? undefined,
+        phone: profile?.phone ?? undefined,
+      },
+    });
+
+    await supabase.rpc("set_order_payment_token", {
+      p_order_id: order.id,
+      p_snap_token: tx.token,
+      p_midtrans_order_id: tx.midtransOrderId,
+    });
+
+    return {
+      ok: true,
+      message: "Sesi pembayaran dibuat.",
+      token: tx.token,
+      redirectUrl: tx.redirect_url,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      message:
+        err instanceof Error ? err.message : "Gagal membuat sesi pembayaran.",
+    };
+  }
 }
 
 export async function cancelOrder(orderId: string): Promise<ActionResult> {

@@ -57,6 +57,10 @@ export interface Order {
   status: OrderStatus;
   shipping_address_json: ShippingAddress | null;
   payment_reference: string | null;
+  payment_provider?: string | null;
+  midtrans_order_id?: string | null;
+  snap_token?: string | null;
+  paid_at?: string | null;
   created_at: string;
   order_items?: OrderItem[];
   profiles?: Pick<Profile, "full_name" | "phone"> | null;

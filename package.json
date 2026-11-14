@@ -9,13 +9,15 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "check:deploy": "node scripts/check-deploy.mjs"
+    "check:deploy": "node scripts/check-deploy.mjs",
+    "verify:midtrans": "tsx scripts/verify-midtrans.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.47.10",
     "clsx": "^2.1.1",
     "lucide-react": "^0.468.0",
+    "midtrans-client": "^1.4.3",
     "next": "^15.1.3",
     "next-themes": "^0.4.4",
     "react": "^19.0.0",
@@ -25,6 +27,7 @@
   },
   "devDependencies": {
     "@types/cookie": "^0.6.0",
+    "@types/midtrans-client": "^1.4.0",
     "@types/node": "^22.10.5",
     "@types/react": "^19.0.4",
     "@types/react-dom": "^19.0.2",
@@ -33,6 +36,7 @@
     "eslint-config-next": "^15.1.3",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
+    "tsx": "^4.23.15",
     "typescript": "^5.7.2"
   }
 }

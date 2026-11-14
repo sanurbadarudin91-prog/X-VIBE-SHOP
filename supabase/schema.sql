@@ -94,6 +94,17 @@ create index if not exists orders_user_id_idx on public.orders (user_id);
 create index if not exists orders_status_idx on public.orders (status);
 create index if not exists orders_created_at_idx on public.orders (created_at desc);
 
+-- Kolom integrasi Midtrans (idempoten untuk DB yang sudah ada).
+alter table public.orders
+  add column if not exists payment_provider text,
+  add column if not exists midtrans_order_id text,
+  add column if not exists snap_token text,
+  add column if not exists paid_at timestamptz;
+
+create unique index if not exists orders_midtrans_order_id_idx
+  on public.orders (midtrans_order_id)
+  where midtrans_order_id is not null;
+
 -- ---------------------------------------------------------------------------
 -- 6. ORDER_ITEMS
 -- ---------------------------------------------------------------------------
@@ -205,19 +216,43 @@ create trigger addresses_single_default
   for each row when (new.is_default)
   execute function public.enforce_single_default_address();
 
--- Kurangi stok untuk seluruh item sebuah pesanan. Dijalankan security definer
--- karena RLS tabel products hanya mengizinkan admin menulis, sementara
--- pengurangan stok dipicu oleh customer yang membayar pesanannya sendiri.
+-- Inti pengurangan/penambahan stok tanpa cek auth (dipakai fungsi tepercaya).
+create or replace function public.apply_stock_delta(p_order_id uuid, p_sign integer)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  r record;
+begin
+  for r in
+    select product_id, quantity
+      from public.order_items
+     where order_id = p_order_id
+       and product_id is not null
+  loop
+    if p_sign >= 0 then
+      update public.products
+         set stock = stock + r.quantity
+       where id = r.product_id;
+    else
+      update public.products
+         set stock = greatest(stock - r.quantity, 0)
+       where id = r.product_id;
+    end if;
+  end loop;
+end;
+$$;
+
+-- Pengurangan stok untuk pemanggil ber-otorisasi (pemilik/admin) saja.
 create or replace function public.decrement_stock_for_order(p_order_id uuid)
 returns void
 language plpgsql
 security definer
 set search_path = public
 as $$
-declare
-  r record;
 begin
-  -- Hanya pemilik pesanan atau admin yang boleh memicu pengurangan stok.
   if not exists (
     select 1 from public.orders
      where id = p_order_id
@@ -226,28 +261,17 @@ begin
     raise exception 'Akses ditolak untuk pesanan ini';
   end if;
 
-  for r in
-    select product_id, quantity
-      from public.order_items
-     where order_id = p_order_id
-       and product_id is not null
-  loop
-    update public.products
-       set stock = greatest(stock - r.quantity, 0)
-     where id = r.product_id;
-  end loop;
+  perform public.apply_stock_delta(p_order_id, -1);
 end;
 $$;
 
--- Kembalikan stok saat pesanan yang sudah lunas dibatalkan.
+-- Kembalikan stok untuk pemanggil ber-otorisasi (pemilik/admin) saja.
 create or replace function public.restore_stock_for_order(p_order_id uuid)
 returns void
 language plpgsql
 security definer
 set search_path = public
 as $$
-declare
-  r record;
 begin
   if not exists (
     select 1 from public.orders
@@ -257,16 +281,7 @@ begin
     raise exception 'Akses ditolak untuk pesanan ini';
   end if;
 
-  for r in
-    select product_id, quantity
-      from public.order_items
-     where order_id = p_order_id
-       and product_id is not null
-  loop
-    update public.products
-       set stock = stock + r.quantity
-     where id = r.product_id;
-  end loop;
+  perform public.apply_stock_delta(p_order_id, 1);
 end;
 $$;
 
@@ -433,6 +448,113 @@ begin
 end;
 $$;
 
+-- Tandai pesanan lunas dari webhook gateway. Tidak memakai auth.uid() karena
+-- webhook berjalan sebagai service_role; dipanggil HANYA dari server tepercaya.
+create or replace function public.mark_order_paid_from_gateway(
+  p_order_id uuid,
+  p_midtrans_order_id text,
+  p_paid_at timestamptz default now()
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_status text;
+begin
+  select status into v_status
+    from public.orders
+   where id = p_order_id
+   for update;
+
+  if v_status is null then
+    raise exception 'Pesanan tidak ditemukan';
+  end if;
+
+  -- Idempotent: sudah lunas/diproses -> tidak melakukan apa-apa.
+  if v_status <> 'pending' then
+    return false;
+  end if;
+
+  perform public.apply_stock_delta(p_order_id, -1);
+  update public.orders
+     set status = 'paid',
+         payment_provider = 'midtrans',
+         midtrans_order_id = coalesce(p_midtrans_order_id, midtrans_order_id),
+         paid_at = p_paid_at
+   where id = p_order_id;
+
+  return true;
+end;
+$$;
+
+-- Batalkan pesanan dari webhook (expire/deny/cancel). Kembalikan stok bila sudah
+-- sempat lunas. Idempotent untuk pesanan yang sudah dibatalkan.
+create or replace function public.mark_order_cancelled_from_gateway(
+  p_order_id uuid
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_status text;
+begin
+  select status into v_status
+    from public.orders
+   where id = p_order_id
+   for update;
+
+  if v_status is null then
+    raise exception 'Pesanan tidak ditemukan';
+  end if;
+
+  if v_status = 'cancelled' then
+    return false;
+  end if;
+  if v_status in ('shipped', 'completed') then
+    return false;
+  end if;
+
+  if v_status = 'paid' then
+    perform public.apply_stock_delta(p_order_id, 1);
+  end if;
+
+  update public.orders set status = 'cancelled' where id = p_order_id;
+  return true;
+end;
+$$;
+
+-- Simpan Snap token & ID transaksi gateway pada pesanan.
+create or replace function public.set_order_payment_token(
+  p_order_id uuid,
+  p_snap_token text,
+  p_midtrans_order_id text
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not exists (
+    select 1 from public.orders
+     where id = p_order_id
+       and (user_id = auth.uid() or public.is_admin())
+  ) then
+    raise exception 'Akses ditolak untuk pesanan ini';
+  end if;
+
+  update public.orders
+     set snap_token = p_snap_token,
+         midtrans_order_id = p_midtrans_order_id,
+         payment_provider = 'midtrans'
+   where id = p_order_id;
+end;
+$$;
+
 -- ============================================================================
 -- ROW LEVEL SECURITY
 -- ============================================================================
@@ -570,3 +692,13 @@ grant execute on function public.pay_order(uuid) to authenticated;
 grant execute on function public.cancel_order(uuid) to authenticated;
 grant execute on function public.decrement_stock_for_order(uuid) to authenticated;
 grant execute on function public.restore_stock_for_order(uuid) to authenticated;
+grant execute on function public.set_order_payment_token(uuid, text, text) to authenticated;
+
+-- Helper stok tanpa cek auth: jangan pernah diekspos ke klien.
+revoke all on function public.apply_stock_delta(uuid, integer) from public, anon, authenticated;
+
+-- Fungsi webhook: hanya service_role (webhook server-side tepercaya).
+revoke all on function public.mark_order_paid_from_gateway(uuid, text, timestamptz) from public, anon, authenticated;
+revoke all on function public.mark_order_cancelled_from_gateway(uuid) from public, anon, authenticated;
+grant execute on function public.mark_order_paid_from_gateway(uuid, text, timestamptz) to service_role;
+grant execute on function public.mark_order_cancelled_from_gateway(uuid) to service_role;

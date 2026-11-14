@@ -3,11 +3,15 @@ import { Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { OrderCard } from "@/components/order-card";
 import { getMyOrders } from "@/lib/queries";
+import { clientKey, isConfigured, isProduction } from "@/lib/payments/midtrans";
 
 export const metadata = { title: "Pesanan Saya" };
 
 export default async function OrdersPage() {
   const orders = await getMyOrders();
+  const midtransEnabled = isConfigured();
+  const midtransClientKey = clientKey();
+  const midtransProduction = isProduction();
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8">
@@ -24,7 +28,13 @@ export default async function OrdersPage() {
       ) : (
         <div className="space-y-4">
           {orders.map((order) => (
-            <OrderCard key={order.id} order={order} />
+            <OrderCard
+              key={order.id}
+              order={order}
+              midtransEnabled={midtransEnabled}
+              midtransClientKey={midtransClientKey}
+              midtransProduction={midtransProduction}
+            />
           ))}
         </div>
       )}
