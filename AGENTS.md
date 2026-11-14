@@ -112,3 +112,21 @@ Transisi divalidasi di `ADMIN_TRANSITIONS` (`src/lib/actions/orders.ts`).
   `src/lib/actions/*.ts`.
 - `deleteProduct` menghapus baris produk lalu membersihkan file di bucket
   `product-images` (best-effort; kegagalan storage tidak menggagalkan hapus).
+
+## STATUS: Fitur produk lanjutan (MENUNGGU MIGRASI DB)
+
+**Kondisi:** kode SELESAI, ter-build, ter-push, dan ter-deploy ke produksi.
+Tinggal satu langkah manual: menjalankan migrasi kolom baru ke DB Supabase
+(tidak ada kredensial DB di repo/agen).
+
+- Jalankan `supabase/migrations/20261114_product_variants.sql` di Supabase
+  SQL Editor (idempoten; aman diulang). Migrasi ini menambah
+  `products.caption/images/colors/variant_stock`, `cart_items.variant_color`,
+  `order_items.variant_color`, indeks keranjang per-warna, fungsi
+  `apply_stock_delta` + `create_order` sadar varian, dan bucket `product-images`.
+- **Sebelum migrasi dijalankan:** admin gagal menyimpan produk dengan pesan
+  "Skema database belum mendukung galeri/varian…" (kode galat 42703). Fitur lama
+  tetap normal; keranjang tetap jalan (kolom varian hanya disentuh bila ada warna).
+- **Setelah migrasi:** semua fitur aktif tanpa perlu deploy ulang.
+- Alternatif: jalankan `supabase/seed.sql` untuk mengisi contoh varian + caption
+  pada produk `Cyber Hoodie Black`.
