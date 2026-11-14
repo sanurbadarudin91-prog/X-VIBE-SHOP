@@ -28,6 +28,9 @@ Region produksi: `sin1` (Singapura) agar dekat Supabase `ap-southeast-2`.
   `getAdminStats`, `getRevenueSeries`, `getLowStockProducts`, `getAdminCustomers`).
 - `src/lib/supabase/` — client (browser/server/admin) + middleware.
 - `supabase/schema.sql` — DDL + RLS + trigger + fungsi RPC (idempoten).
+- `supabase/migrations/` — migrasi inkremental idempoten untuk DB yang sudah jalan
+  (mis. `20261114_product_variants.sql`). Jalankan di SQL Editor Supabase bila
+  tidak punya kredensial psql.
 - `supabase/seed.sql` — data contoh (idempoten).
 
 ## Konvensi penting
@@ -90,3 +93,22 @@ Transisi divalidasi di `ADMIN_TRANSITIONS` (`src/lib/actions/orders.ts`).
   hands". Tindakan: perbarui `MIDTRANS_SERVER_KEY` + `NEXT_PUBLIC_MIDTRANS_CLIENT_KEY`
   (Vercel 3 env + `.env.local`) dengan kunci baru dari user, deploy, lalu uji
   `createSnapSession`/popup Snap sampai token berhasil dibuat.
+
+## Fitur produk lanjutan (galeri multi-foto + varian warna)
+
+- Kolom `products`: `images jsonb` (galeri, foto pertama = `image_url`),
+  `colors jsonb` (daftar nama warna), `variant_stock jsonb` (stok per warna),
+  `caption text` (deskripsi kaya, ditampilkan apa adanya dengan `whitespace-pre-line`).
+- `cart_items.variant_color` & `order_items.variant_color` menyimpan warna yang dibeli.
+  Keranjang unik per `(user_id, product_id, coalesce(variant_color,''))`.
+- Bila produk punya varian warna, `products.stock` = jumlah stok semua varian
+  (dihitung ulang di `saveProduct`). RPC `create_order` memvalidasi stok per warna,
+  `apply_stock_delta` mengurangi/mengembalikan stok varian yang sesuai.
+- Komponen: `product-images-uploader.tsx` (unggah maks 10 foto, bucket
+  `product-images`), `variant-color-editor.tsx`, `product-purchase-panel.tsx`.
+  Batas foto/ukuran: `src/lib/product-constants.ts`.
+- **Catatan Next.js:** file `"use server"` hanya boleh mengekspor fungsi async —
+  konstanta bersama (mis. `MAX_PRODUCT_IMAGES`) harus di modul terpisah, bukan di
+  `src/lib/actions/*.ts`.
+- `deleteProduct` menghapus baris produk lalu membersihkan file di bucket
+  `product-images` (best-effort; kegagalan storage tidak menggagalkan hapus).

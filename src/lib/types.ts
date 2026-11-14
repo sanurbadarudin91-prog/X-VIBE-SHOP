@@ -34,10 +34,14 @@ export interface Product {
   id: string;
   title: string;
   description: string | null;
+  caption: string | null;
   price: number;
   stock: number;
   category: string;
   image_url: string | null;
+  images: string[];
+  colors: string[];
+  variant_stock: Record<string, number>;
   created_at: string;
 }
 
@@ -46,6 +50,7 @@ export interface CartItem {
   user_id: string;
   product_id: string;
   quantity: number;
+  variant_color: string | null;
   created_at: string;
   products?: Product;
 }
@@ -72,6 +77,7 @@ export interface OrderItem {
   product_id: string | null;
   quantity: number;
   price_at_purchase: number;
+  variant_color: string | null;
   products?: Pick<Product, "title" | "image_url"> | null;
 }
 

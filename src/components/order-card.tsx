@@ -165,6 +165,9 @@ export function OrderCard({
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {item.quantity} × {formatIDR(item.price_at_purchase)}
+                  {item.variant_color && (
+                    <span className="text-muted-foreground"> · {item.variant_color}</span>
+                  )}
                 </p>
               </div>
               <span className="text-sm font-medium">

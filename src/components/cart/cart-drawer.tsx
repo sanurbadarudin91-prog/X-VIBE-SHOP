@@ -102,6 +102,11 @@ export function CartDrawer() {
                       <span className="text-sm font-semibold text-primary">
                         {formatIDR(p?.price ?? 0)}
                       </span>
+                      {item.variant_color && (
+                        <span className="text-xs text-muted-foreground">
+                          Warna: {item.variant_color}
+                        </span>
+                      )}
                       <div className="mt-auto flex items-center justify-between">
                         <div className="flex items-center gap-1">
                           <Button

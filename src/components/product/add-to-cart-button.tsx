@@ -12,12 +12,14 @@ import { cn } from "@/lib/utils";
 export function AddToCartButton({
   productId,
   stock,
+  variantColor = null,
   buyNow = false,
   className,
   fullWidth = false,
 }: {
   productId: string;
   stock: number;
+  variantColor?: string | null;
   buyNow?: boolean;
   className?: string;
   fullWidth?: boolean;
@@ -32,7 +34,7 @@ export function AddToCartButton({
   function handleClick() {
     if (disabled) return;
     startTransition(async () => {
-      const res = await addToCart(productId, 1);
+      const res = await addToCart(productId, 1, variantColor);
       if (!res.ok) {
         toast.error(res.message);
         if (res.message.includes("login")) router.push("/login");

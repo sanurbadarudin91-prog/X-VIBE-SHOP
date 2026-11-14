@@ -17,7 +17,10 @@ export function CartLineItem({ item }: { item: CartItem }) {
   const [qty, setQty] = useState(item.quantity);
 
   const p = item.products;
-  const stock = p?.stock ?? 0;
+  const stock =
+    item.variant_color && p?.variant_stock
+      ? Number(p.variant_stock[item.variant_color] ?? 0)
+      : p?.stock ?? 0;
 
   function change(next: number) {
     if (next < 1) return;
@@ -74,6 +77,11 @@ export function CartLineItem({ item }: { item: CartItem }) {
         </div>
 
         <span className="mt-1 text-sm text-primary">{formatIDR(p?.price ?? 0)}</span>
+        {item.variant_color && (
+          <span className="mt-0.5 text-xs text-muted-foreground">
+            Warna: <strong>{item.variant_color}</strong>
+          </span>
+        )}
 
         <div className="mt-auto flex items-center justify-between pt-2">
           <div className="flex items-center gap-1">

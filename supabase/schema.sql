@@ -52,15 +52,27 @@ create table if not exists public.products (
   id          uuid primary key default gen_random_uuid(),
   title       text not null,
   description text,
+  caption     text,
   price       numeric(14, 2) not null default 0 check (price >= 0),
   stock       integer not null default 0 check (stock >= 0),
   category    text not null default 'Apparel',
   image_url   text,
+  images      jsonb not null default '[]'::jsonb,
+  colors      jsonb not null default '[]'::jsonb,
+  variant_stock jsonb not null default '{}'::jsonb,
   created_at  timestamptz not null default now()
 );
 
 create index if not exists products_category_idx on public.products (category);
 create index if not exists products_created_at_idx on public.products (created_at desc);
+
+-- Kolom lanjutan produk: galeri multi-foto, caption kaya, varian warna & stok
+-- per warna (idempoten untuk DB yang sudah ada).
+alter table public.products
+  add column if not exists caption       text,
+  add column if not exists images        jsonb not null default '[]'::jsonb,
+  add column if not exists colors        jsonb not null default '[]'::jsonb,
+  add column if not exists variant_stock jsonb not null default '{}'::jsonb;
 
 -- ---------------------------------------------------------------------------
 -- 4. CART_ITEMS
@@ -70,11 +82,22 @@ create table if not exists public.cart_items (
   user_id     uuid not null references auth.users (id) on delete cascade,
   product_id  uuid not null references public.products (id) on delete cascade,
   quantity    integer not null default 1 check (quantity > 0),
-  created_at  timestamptz not null default now(),
-  unique (user_id, product_id)
+  created_at  timestamptz not null default now()
 );
 
 create index if not exists cart_items_user_id_idx on public.cart_items (user_id);
+
+-- Varian warna pada item keranjang (idempoten).
+alter table public.cart_items
+  add column if not exists variant_color text;
+
+-- Satu baris per (user, produk, warna). Batasan unik lama (user, product)
+-- dihapus agar satu produk bisa masuk dengan beberapa warna berbeda.
+alter table public.cart_items
+  drop constraint if exists cart_items_user_id_product_id_key;
+
+create unique index if not exists cart_items_user_product_variant_idx
+  on public.cart_items (user_id, product_id, coalesce(variant_color, ''));
 
 -- ---------------------------------------------------------------------------
 -- 5. ORDERS
@@ -117,6 +140,10 @@ create table if not exists public.order_items (
 );
 
 create index if not exists order_items_order_id_idx on public.order_items (order_id);
+
+-- Varian warna pada item pesanan (idempoten).
+alter table public.order_items
+  add column if not exists variant_color text;
 
 -- ---------------------------------------------------------------------------
 -- 7. VOUCHERS
@@ -225,12 +252,14 @@ set search_path = public
 as $$
 declare
   r record;
+  v_new integer;
 begin
   for r in
-    select product_id, quantity
-      from public.order_items
-     where order_id = p_order_id
-       and product_id is not null
+    select oi.product_id, oi.quantity, oi.variant_color, p.variant_stock
+      from public.order_items oi
+      join public.products p on p.id = oi.product_id
+     where oi.order_id = p_order_id
+       and oi.product_id is not null
   loop
     if p_sign >= 0 then
       update public.products
@@ -239,6 +268,22 @@ begin
     else
       update public.products
          set stock = greatest(stock - r.quantity, 0)
+       where id = r.product_id;
+    end if;
+
+    -- Selaraskan stok per varian warna bila warna item terdaftar di produk.
+    if r.variant_color is not null and jsonb_exists(r.variant_stock, r.variant_color) then
+      v_new := coalesce((r.variant_stock ->> r.variant_color)::integer, 0) +
+               (case when p_sign >= 0 then r.quantity else -r.quantity end);
+      if v_new < 0 then
+        v_new := 0;
+      end if;
+      update public.products
+         set variant_stock = jsonb_set(
+               variant_stock,
+               array[r.variant_color],
+               to_jsonb(v_new)
+             )
        where id = r.product_id;
     end if;
   end loop;
@@ -368,6 +413,7 @@ declare
   v_reference text;
   v_voucher record;
   v_voucher_id uuid;
+  v_available integer;
   r record;
 begin
   if v_uid is null then
@@ -386,13 +432,25 @@ begin
     for update of p;
 
   for r in
-    select p.title, p.price, p.stock, c.quantity
+    select p.id, p.title, p.price, p.stock, p.variant_stock, c.quantity,
+           c.variant_color
       from public.cart_items c
       join public.products p on p.id = c.product_id
      where c.user_id = v_uid
   loop
-    if r.quantity > r.stock then
-      raise exception 'Stok "%" tidak mencukupi (tersisa %)', r.title, r.stock;
+    -- Bila varian warna dipilih dan produk punya stok per warna, validasi stok
+    -- varian tersebut; jika tidak, jatuh ke stok total produk.
+    if r.variant_color is not null and jsonb_exists(r.variant_stock, r.variant_color) then
+      v_available := coalesce((r.variant_stock ->> r.variant_color)::integer, 0);
+    else
+      v_available := r.stock;
+    end if;
+
+    if r.quantity > v_available then
+      raise exception 'Stok "%"% tidak mencukupi (tersisa %)',
+        r.title,
+        case when r.variant_color is not null then ' warna ' || r.variant_color else '' end,
+        v_available;
     end if;
     v_subtotal := v_subtotal + r.price * r.quantity;
   end loop;
@@ -432,8 +490,8 @@ begin
   values (v_uid, v_total, 'pending', p_address, v_reference)
   returning id into v_order_id;
 
-  insert into public.order_items (order_id, product_id, quantity, price_at_purchase)
-  select v_order_id, c.product_id, c.quantity, p.price
+  insert into public.order_items (order_id, product_id, quantity, price_at_purchase, variant_color)
+  select v_order_id, c.product_id, c.quantity, p.price, c.variant_color
     from public.cart_items c
     join public.products p on p.id = c.product_id
    where c.user_id = v_uid;

@@ -4,7 +4,7 @@ import { ArrowLeft, Check, Star, Truck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ProductGallery } from "@/components/product/product-gallery";
-import { AddToCartButton } from "@/components/product/add-to-cart-button";
+import { ProductPurchasePanel } from "@/components/product/product-purchase-panel";
 import { getProduct } from "@/lib/queries";
 import { formatIDR } from "@/lib/utils";
 
@@ -34,7 +34,14 @@ export default async function ProductDetailPage({
   const product = await getProduct(id);
   if (!product) notFound();
 
-  const gallery = product.image_url ? [product.image_url] : [];
+  const gallery =
+    product.images && product.images.length > 0
+      ? product.images
+      : product.image_url
+        ? [product.image_url]
+        : [];
+  const colors = product.colors ?? [];
+  const variantStock = product.variant_stock ?? {};
   const avgRating =
     SAMPLE_REVIEWS.reduce((s, r) => s + r.rating, 0) / SAMPLE_REVIEWS.length;
 
@@ -78,11 +85,6 @@ export default async function ProductDetailPage({
             <span className="inline-flex items-center gap-1 text-muted-foreground">
               <Truck className="h-4 w-4" /> Estimasi 1–3 hari
             </span>
-            {product.stock > 0 ? (
-              <Badge tone="success">Stok tersedia: {product.stock}</Badge>
-            ) : (
-              <Badge tone="danger">Stok habis</Badge>
-            )}
           </div>
 
           <p className="mt-5 whitespace-pre-line leading-relaxed text-muted-foreground">
@@ -99,17 +101,25 @@ export default async function ProductDetailPage({
             )}
           </ul>
 
-          <div className="mt-6 flex flex-col gap-2 sm:flex-row">
-            <AddToCartButton productId={product.id} stock={product.stock} className="flex-1" />
-            <AddToCartButton
+          <div className="mt-6">
+            <ProductPurchasePanel
               productId={product.id}
               stock={product.stock}
-              buyNow
-              className="flex-1"
+              colors={colors}
+              variantStock={variantStock}
             />
           </div>
         </div>
       </div>
+
+      {product.caption && (
+        <section className="mt-12 rounded-xl border border-border bg-card p-6">
+          <h2 className="mb-4 text-xl font-bold">Detail Produk</h2>
+          <div className="whitespace-pre-line leading-relaxed text-muted-foreground">
+            {product.caption}
+          </div>
+        </section>
+      )}
 
       <section className="mt-12">
         <h2 className="mb-4 text-xl font-bold">Ulasan Pembeli</h2>

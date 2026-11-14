@@ -26,3 +26,24 @@ select * from (values
   ('GRATISONGKIR','fixed',     20000::numeric, 150000::numeric, now() + interval '45 days', true)
 ) as v(code, discount_type, discount_value, min_purchase, expiry_date, is_active)
 where not exists (select 1 from public.vouchers x where x.code = v.code);
+
+-- Demo varian warna + galeri multi-foto untuk produk apparel terpilih.
+-- Stok total produk disamakan dengan jumlah stok tiap varian.
+update public.products set
+  colors        = '["Hitam","Navy","Sage Green","Maroon"]'::jsonb,
+  variant_stock = '{"Hitam":15,"Navy":8,"Sage Green":6,"Maroon":4}'::jsonb,
+  stock         = 33,
+  images        = case
+                    when image_url is null then '[]'::jsonb
+                    else jsonb_build_array(image_url)
+                  end,
+  caption       = 'Bahan: Cotton fleece premium 320gsm, adem & tidak mudah melar.' || E'\n\n' ||
+                  'Panduan Ukuran (Lebar x Panjang):' || E'\n' ||
+                  'M  : 50 x 68 cm' || E'\n' ||
+                  'L  : 53 x 70 cm' || E'\n' ||
+                  'XL : 56 x 72 cm' || E'\n\n' ||
+                  'Keunggulan:' || E'\n' ||
+                  '- Jahitan rantai rapi & kuat' || E'\n' ||
+                  '- Warna solid, tidak mudah pudar' || E'\n' ||
+                  '- Cocok untuk pria & wanita (unisex)'
+where title = 'Cyber Hoodie Black';
