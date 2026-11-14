@@ -21,8 +21,11 @@ Region produksi: `sin1` (Singapura) agar dekat Supabase `ap-southeast-2`.
 ## Struktur
 
 - `src/app/(shop)/` — halaman toko; `src/app/admin/` — dashboard admin.
+- `src/app/admin/` — Ringkasan (`page.tsx`), Produk, Pesanan, Pelanggan
+  (`customers/`), Voucher. Komponen di `src/components/admin/`.
 - `src/lib/actions/` — Next.js Server Actions (mutasi data).
-- `src/lib/queries.ts` — pembacaan data server-side.
+- `src/lib/queries.ts` — pembacaan data server-side (termasuk query admin:
+  `getAdminStats`, `getRevenueSeries`, `getLowStockProducts`, `getAdminCustomers`).
 - `src/lib/supabase/` — client (browser/server/admin) + middleware.
 - `supabase/schema.sql` — DDL + RLS + trigger + fungsi RPC (idempoten).
 - `supabase/seed.sql` — data contoh (idempoten).
