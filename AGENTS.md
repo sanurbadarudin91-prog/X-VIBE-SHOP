@@ -160,8 +160,9 @@ produk dua dimensi.
   keranjang unik per `(user_id, product_id, coalesce(variant_color,''), coalesce(variant_size,''))`.
   `variant_available` / `variant_apply` mencari kunci gabungan → warna saja →
   ukuran saja → stok total, sehingga data varian warna lama tetap kompatibel.
-- **Migrasi:** `supabase/migrations/20261120_product_sizes_hex.sql` (idempoten).
-  Bila belum dijalankan, admin menampilkan pesan 42703 dan keranjang tetap jalan
+- **Migrasi:** `supabase/migrations/20261120_product_sizes_hex.sql` (idempoten),
+  sudah diterapkan ke DB produksi (2026-11-15). Bila di DB lain belum dijalankan,
+  admin menampilkan pesan 42703 dan keranjang tetap jalan
   (kolom varian hanya ditulis bila ada nilai).
 - **i18n:** `src/lib/i18n/dictionaries.ts` (12 bahasa, `MessageKey`), provider
   klien (`provider.tsx`, `useI18n` / `useOptionalI18n`), pembaca server
