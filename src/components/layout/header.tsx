@@ -3,14 +3,13 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LogOut, LayoutDashboard, User, Menu, X } from "lucide-react";
+import { LogOut, User } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LanguageSwitcher } from "@/components/layout/language-switcher";
 import { BrandWordmark } from "@/components/layout/brand-logo";
 import { SearchBar } from "@/components/layout/search-bar";
-import { CartButton } from "@/components/cart/cart-button";
 import { createClient } from "@/lib/supabase/client";
 import { useI18n } from "@/lib/i18n/provider";
 import type { Profile } from "@/lib/types";
@@ -18,7 +17,6 @@ import type { Profile } from "@/lib/types";
 export function Header({ profile }: { profile: Profile | null }) {
   const router = useRouter();
   const { t } = useI18n();
-  const [mobileOpen, setMobileOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
   async function handleLogout() {
@@ -62,10 +60,9 @@ export function Header({ profile }: { profile: Profile | null }) {
         <div className="ml-auto flex items-center gap-1 md:ml-0">
           <LanguageSwitcher compact />
           <ThemeToggle />
-          <CartButton />
 
           {profile ? (
-            <div className="hidden items-center gap-1 md:flex">
+            <>
               <Button asChild variant="ghost" size="icon" title={t("nav.profile")}>
                 <Link href="/profile">
                   <User className="h-5 w-5" />
@@ -80,83 +77,14 @@ export function Header({ profile }: { profile: Profile | null }) {
               >
                 {!loggingOut && <LogOut className="h-5 w-5" />}
               </Button>
-            </div>
+            </>
           ) : (
-            <Button asChild size="sm" className="hidden md:inline-flex">
+            <Button asChild size="sm">
               <Link href="/login">{t("nav.login")}</Link>
             </Button>
           )}
-
-          <Button
-            variant="ghost"
-            size="icon"
-            className="md:hidden"
-            aria-label="Menu"
-            onClick={() => setMobileOpen((v) => !v)}
-          >
-            {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-          </Button>
         </div>
       </div>
-
-      {mobileOpen && (
-        <div className="border-t border-border bg-background px-4 py-3 md:hidden animate-fade-in">
-          <SearchBar className="mb-3" />
-          <nav className="flex flex-col gap-1">
-            {navLinks.map((l) => (
-              <Link
-                key={l.href}
-                href={l.href}
-                onClick={() => setMobileOpen(false)}
-                className="rounded-md px-3 py-2 text-sm font-medium hover:bg-secondary"
-              >
-                {l.label}
-              </Link>
-            ))}
-            {profile?.role === "admin" && (
-              <Link
-                href="/admin"
-                onClick={() => setMobileOpen(false)}
-                className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium hover:bg-secondary"
-              >
-                <LayoutDashboard className="h-4 w-4" /> {t("nav.admin")}
-              </Link>
-            )}
-            {profile ? (
-              <>
-                <Link
-                  href="/profile"
-                  onClick={() => setMobileOpen(false)}
-                  className="rounded-md px-3 py-2 text-sm font-medium hover:bg-secondary"
-                >
-                  {t("nav.profile")}
-                </Link>
-                <Link
-                  href="/orders"
-                  onClick={() => setMobileOpen(false)}
-                  className="rounded-md px-3 py-2 text-sm font-medium hover:bg-secondary"
-                >
-                  {t("nav.orders")}
-                </Link>
-                <button
-                  onClick={handleLogout}
-                  className="rounded-md px-3 py-2 text-left text-sm font-medium text-destructive hover:bg-secondary"
-                >
-                  {t("nav.logout")}
-                </button>
-              </>
-            ) : (
-              <Link
-                href="/login"
-                onClick={() => setMobileOpen(false)}
-                className="mt-1 rounded-md bg-primary px-3 py-2 text-center text-sm font-medium text-primary-foreground"
-              >
-                {t("nav.login")}
-              </Link>
-            )}
-          </nav>
-        </div>
-      )}
     </header>
   );
 }

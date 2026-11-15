@@ -179,6 +179,11 @@ produk dua dimensi.
   (`BrandLogo`, `BrandWordmark`), `footer.tsx` ("©2026 X-VIBE SHOP. design by alpha"),
   `language-switcher.tsx`. Layout toko di `src/app/(shop)/layout.tsx` menambah
   `pb-20 md:pb-0` agar konten tidak tertutup bottom nav.
+- **Header (`header.tsx`):** sengaja tanpa ikon keranjang dan tanpa tombol menu
+  hamburger. Akses keranjang hanya lewat bottom nav (mobile) dan drawer; navigasi
+  utama tampil di `md:flex`. Untuk pengguna login, header menampilkan ikon Profil
+  dan Keluar (sign out) di semua ukuran layar. Logout juga tersedia di halaman
+  profil lewat `src/components/profile/logout-button.tsx` (kunci `profile.logout`).
 - **PWA:** `public/manifest.json`, `public/sw.js` (network-first + fallback
   `/offline`), ikon `public/icon-{192,512}.png` + `apple-touch-icon.png` +
   `favicon.png` (dibuat dari SVG via `sharp`), splash via komponen

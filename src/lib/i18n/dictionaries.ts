@@ -114,6 +114,8 @@ export type MessageKey =
   | "profile.orders"
   | "profile.admin"
   | "profile.shortcuts"
+  | "profile.logout"
+  | "profile.logoutDesc"
   | "orders.title"
   | "orders.empty"
   | "orders.reference"
@@ -197,6 +199,8 @@ const id: Dict = {
   "profile.orders": "Pesanan Saya",
   "profile.admin": "Dashboard Admin",
   "profile.shortcuts": "Menu Akun",
+  "profile.logout": "Keluar Akun",
+  "profile.logoutDesc": "Akhiri sesi di perangkat ini.",
   "orders.title": "Pesanan Saya",
   "orders.empty": "Belum ada pesanan.",
   "orders.reference": "Referensi",
@@ -279,6 +283,8 @@ const en: Dict = {
   "profile.orders": "My Orders",
   "profile.admin": "Admin Dashboard",
   "profile.shortcuts": "Account Menu",
+  "profile.logout": "Sign Out",
+  "profile.logoutDesc": "End your session on this device.",
   "orders.title": "My Orders",
   "orders.empty": "No orders yet.",
   "orders.reference": "Reference",
