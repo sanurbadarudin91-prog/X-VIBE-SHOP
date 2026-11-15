@@ -18,6 +18,23 @@ npm run check:deploy [url]  # verifikasi rute setelah deploy
 Konfigurasi Vercel ada di `vercel.json`; panduan lengkap di `DEPLOY.md`.
 Region produksi: `sin1` (Singapura) agar dekat Supabase `ap-southeast-2`.
 
+- Produksi: `https://x-vibe-shop.vercel.app` (team `x-vibe-cyber-development`,
+  project `x-vibe-shop`, `prj_J4NKAUJAWWE6TpfqrR9BHW2PWxH8`).
+- **Penting:** deploy produksi dipicu oleh push ke branch `main` (branch
+  produksi Vercel). Push ke `feat/x-vibe-shop` hanya membuat *preview
+  deployment* (dan preview dilindungi login Vercel). Jadi setelah fitur selesai
+  di `feat/x-vibe-shop`, buka PR lalu **merge ke `main`** agar produksi ikut
+  ter-update.
+- Kredensial Vercel CLI tidak tersedia di sandbox; deploy mengandalkan
+  integrasi Git Vercel (bukan `vercel --prod` dari CLI).
+
+## Keamanan
+
+- Jangan menulis nilai kredensial ke file yang di-commit (kunci Midtrans,
+  service key Supabase, password DB, token GitHub). Rujuk nama env saja.
+- Kredensial DB Supabase dipakai agen untuk menjalankan migrasi diambil dari
+  riwayat percakapan/permintaan user, bukan dari repo.
+
 ## Struktur
 
 - `src/app/(shop)/` — halaman toko; `src/app/admin/` — dashboard admin.
@@ -46,6 +63,9 @@ Region produksi: `sin1` (Singapura) agar dekat Supabase `ap-southeast-2`.
   gabungkan (lihat `getAdminOrders`).
 - Setelah mengubah `schema.sql`, terapkan perubahan ke DB dan uji ulang.
 - Jangan commit `.env.local`; `.env.example` hanya berisi placeholder.
+- Jangan pernah menulis nilai kredensial (kunci Midtrans, service key Supabase,
+  password DB, token GitHub) ke file yang di-commit — termasuk dokumentasi
+  seperti file ini. Rujuk nama env-nya saja.
 
 ## Alur pesanan
 
@@ -80,8 +100,9 @@ Transisi divalidasi di `ADMIN_TRANSITIONS` (`src/lib/actions/orders.ts`).
   webhook `src/app/api/payment/midtrans/webhook/route.ts`, tombol Bayar di
   `src/components/order-card.tsx`. Semua ter-commit & ter-deploy.
 - **Tidak ada** validasi prefix `SB-` di kode mana pun (sudah diaudit).
-- Env Vercel + `.env.local` berisi `SB-Mid-server-WESXb30atZ-Jq30hEaifRu5y` /
-  `SB-Mid-client-mAcNPy5QWkKdK0ps` (tersimpan utuh, panjang 38, prefix benar).
+- Env Vercel + `.env.local` berisi `MIDTRANS_SERVER_KEY` /
+  `NEXT_PUBLIC_MIDTRANS_CLIENT_KEY` (kunci sandbox, panjang 38, prefix `SB-`
+  benar). Nilai kunci **tidak** ditulis di repo — ambil dari env/dashboard saja.
 - **BLOCKER:** Midtrans membalas `401 {"error":"Unauthorized"}` untuk SEMUA
   varian kunci (dengan/tanpa `SB-`) di endpoint sandbox & produksi, diuji dari
   region Vercel `sin1` juga. Kunci sampah pun 401 identik → Midtrans tidak
@@ -113,21 +134,17 @@ Transisi divalidasi di `ADMIN_TRANSITIONS` (`src/lib/actions/orders.ts`).
 - `deleteProduct` menghapus baris produk lalu membersihkan file di bucket
   `product-images` (best-effort; kegagalan storage tidak menggagalkan hapus).
 
-## STATUS: Fitur produk lanjutan (MENUNGGU MIGRASI DB)
+## STATUS: Fitur produk lanjutan (MIGRASI DB SUDAH DITERAPKAN)
 
-**Kondisi:** kode SELESAI, ter-build, ter-push, dan ter-deploy ke produksi.
-Tinggal satu langkah manual: menjalankan migrasi kolom baru ke DB Supabase
-(tidak ada kredensial DB di repo/agen).
+**Kondisi:** kode SELESAI; migrasi `20261114_product_variants.sql` dan
+`20261120_product_sizes_hex.sql` **sudah diterapkan ke DB Supabase**
+(2026-11-15) sehingga semua fitur galeri/varian aktif.
 
-- Jalankan `supabase/migrations/20261114_product_variants.sql` di Supabase
-  SQL Editor (idempoten; aman diulang). Migrasi ini menambah
-  `products.caption/images/colors/variant_stock`, `cart_items.variant_color`,
-  `order_items.variant_color`, indeks keranjang per-warna, fungsi
-  `apply_stock_delta` + `create_order` sadar varian, dan bucket `product-images`.
-- **Sebelum migrasi dijalankan:** admin gagal menyimpan produk dengan pesan
-  "Skema database belum mendukung galeri/varian…" (kode galat 42703). Fitur lama
-  tetap normal; keranjang tetap jalan (kolom varian hanya disentuh bila ada warna).
-- **Setelah migrasi:** semua fitur aktif tanpa perlu deploy ulang.
+- Migrasi diterapkan via koneksi Postgres langsung ke pooler
+  `aws-0-ap-southeast-2.pooler.supabase.com:5432` (user `postgres.<ref>`),
+  memakai klien Python `pg8000` karena `psql` tidak tersedia di sandbox.
+  Berikutnya: SQL Editor Supabase, atau klien Postgres memakai kredensial DB
+  dari dashboard. **Kredensial DB tidak disimpan di repo.**
 - Alternatif: jalankan `supabase/seed.sql` untuk mengisi contoh varian + caption
   pada produk `Cyber Hoodie Black`.
 
@@ -168,10 +185,11 @@ produk dua dimensi.
 - **Util varian:** `src/lib/variants.ts` (`variantKey`, `variantStock`,
   `variantLabel`, `colorSwatch`).
 
-## STATUS: Perombakan UI/UX mobile + varian warna×ukuran (MENUNGGU MIGRASI DB)
+## STATUS: Perombakan UI/UX mobile + varian warna×ukuran (SELESAI + MIGRASI OK)
 
-**Kondisi:** kode SELESAI, ter-build, ter-lint. Tinggal menjalankan
-`supabase/migrations/20261120_product_sizes_hex.sql` di Supabase SQL Editor
-(idempoten; tidak ada kredensial DB di repo/agen). Setelah migrasi dijalankan,
-semua fitur varian warna+ukuran aktif tanpa deploy ulang. Sampai saat itu admin
-gagal menyimpan varian (pesan 42703) dan keranjang berjalan tanpa varian ukuran.
+**Kondisi:** kode SELESAI, ter-build, ter-lint. Migrasi
+`supabase/migrations/20261120_product_sizes_hex.sql` **sudah diterapkan ke DB
+Supabase** (2026-11-15): kolom `products.color_hex`, `products.sizes`,
+`cart_items.variant_size`, `order_items.variant_size`, indeks unik keranjang
+per warna+ukuran, dan fungsi `variant_key`/`variant_available`/`variant_apply`
+serta `create_order`/`apply_stock_delta` sadar varian sudah aktif.
