@@ -62,6 +62,12 @@ Region produksi: `sin1` (Singapura) agar dekat Supabase `ap-southeast-2`.
   ada relasi PostgREST `profiles` yang bisa di-embed; ambil profil terpisah lalu
   gabungkan (lihat `getAdminOrders`).
 - Setelah mengubah `schema.sql`, terapkan perubahan ke DB dan uji ulang.
+- **Jangan hapus/pindahkan node DOM milik React secara manual** (mis.
+  `element.remove()` pada elemen yang dirender komponen). React akan gagal
+  merekonsiliasi pada navigasi client-side dan seluruh halaman menampilkan
+  `Application error` (white screen) dengan error
+  `Failed to execute insertBefore/removeChild on Node`. Kelola visibilitas
+  lewat state React, bukan manipulasi DOM langsung.
 - Jangan commit `.env.local`; `.env.example` hanya berisi placeholder.
 - Jangan pernah menulis nilai kredensial (kunci Midtrans, service key Supabase,
   password DB, token GitHub) ke file yang di-commit — termasuk dokumentasi
@@ -175,8 +181,9 @@ produk dua dimensi.
   `pb-20 md:pb-0` agar konten tidak tertutup bottom nav.
 - **PWA:** `public/manifest.json`, `public/sw.js` (network-first + fallback
   `/offline`), ikon `public/icon-{192,512}.png` + `apple-touch-icon.png` +
-  `favicon.png` (dibuat dari SVG via `sharp`), splash di `src/app/layout.tsx`,
-  pendaftaran SW di `src/components/layout/pwa-register.tsx`, halaman
+  `favicon.png` (dibuat dari SVG via `sharp`), splash via komponen
+  `src/components/layout/splash-screen.tsx`, pendaftaran SW di
+  `src/components/layout/pwa-register.tsx`, halaman
   `src/app/offline/page.tsx`.
 - **Admin:** `admin-sidebar.tsx` (sidebar + tab mobile, status aktif),
   `variant-editor.tsx` (warna + color picker hex + ukuran + matriks stok
