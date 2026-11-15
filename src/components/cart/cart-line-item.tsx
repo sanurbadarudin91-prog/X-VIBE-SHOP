@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useCart } from "@/components/cart/cart-provider";
 import { formatIDR } from "@/lib/utils";
+import { variantLabel, variantStock } from "@/lib/variants";
 import { removeCartItem, updateCartQuantity } from "@/lib/actions/cart";
 import type { CartItem } from "@/lib/types";
 
@@ -17,10 +18,10 @@ export function CartLineItem({ item }: { item: CartItem }) {
   const [qty, setQty] = useState(item.quantity);
 
   const p = item.products;
-  const stock =
-    item.variant_color && p?.variant_stock
-      ? Number(p.variant_stock[item.variant_color] ?? 0)
-      : p?.stock ?? 0;
+  const stock = p
+    ? variantStock(p, item.variant_color, item.variant_size)
+    : 0;
+  const label = variantLabel(item.variant_color, item.variant_size);
 
   function change(next: number) {
     if (next < 1) return;
@@ -49,10 +50,10 @@ export function CartLineItem({ item }: { item: CartItem }) {
   }
 
   return (
-    <div className="flex gap-4 rounded-lg border border-border bg-card p-4">
-      <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-md bg-muted">
+    <div className="flex gap-3 rounded-2xl border border-border bg-card p-3">
+      <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-muted">
         {p?.image_url && (
-          <Image src={p.image_url} alt={p.title} fill sizes="96px" className="object-cover" />
+          <Image src={p.image_url} alt={p.title} fill sizes="80px" className="object-cover" />
         )}
       </div>
 
@@ -60,14 +61,14 @@ export function CartLineItem({ item }: { item: CartItem }) {
         <div className="flex items-start justify-between gap-2">
           <Link
             href={`/products/${item.product_id}`}
-            className="font-medium hover:text-primary"
+            className="line-clamp-2 text-sm font-medium hover:text-primary"
           >
             {p?.title ?? "Produk"}
           </Link>
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 text-destructive hover:text-destructive"
+            className="h-7 w-7 text-destructive hover:text-destructive"
             onClick={remove}
             disabled={pending}
             aria-label="Hapus produk"
@@ -76,30 +77,30 @@ export function CartLineItem({ item }: { item: CartItem }) {
           </Button>
         </div>
 
-        <span className="mt-1 text-sm text-primary">{formatIDR(p?.price ?? 0)}</span>
-        {item.variant_color && (
-          <span className="mt-0.5 text-xs text-muted-foreground">
-            Warna: <strong>{item.variant_color}</strong>
-          </span>
+        {label && (
+          <span className="mt-0.5 text-xs text-muted-foreground">{label}</span>
         )}
+        <span className="mt-1 text-sm font-semibold text-primary">
+          {formatIDR(p?.price ?? 0)}
+        </span>
 
         <div className="mt-auto flex items-center justify-between pt-2">
           <div className="flex items-center gap-1">
             <Button
               variant="outline"
               size="icon"
-              className="h-8 w-8"
+              className="h-7 w-7"
               onClick={() => change(qty - 1)}
               disabled={pending || qty <= 1}
               aria-label="Kurangi jumlah"
             >
               <Minus className="h-3.5 w-3.5" />
             </Button>
-            <span className="w-10 text-center font-medium">{qty}</span>
+            <span className="w-8 text-center text-sm font-medium">{qty}</span>
             <Button
               variant="outline"
               size="icon"
-              className="h-8 w-8"
+              className="h-7 w-7"
               onClick={() => change(qty + 1)}
               disabled={pending || qty >= stock}
               aria-label="Tambah jumlah"
@@ -107,7 +108,7 @@ export function CartLineItem({ item }: { item: CartItem }) {
               <Plus className="h-3.5 w-3.5" />
             </Button>
           </div>
-          <span className="font-semibold">
+          <span className="text-sm font-semibold">
             {formatIDR(Number(p?.price ?? 0) * qty)}
           </span>
         </div>

@@ -7,13 +7,17 @@ import { LogOut, LayoutDashboard, User, Menu, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { LanguageSwitcher } from "@/components/layout/language-switcher";
+import { BrandWordmark } from "@/components/layout/brand-logo";
 import { SearchBar } from "@/components/layout/search-bar";
 import { CartButton } from "@/components/cart/cart-button";
 import { createClient } from "@/lib/supabase/client";
+import { useI18n } from "@/lib/i18n/provider";
 import type { Profile } from "@/lib/types";
 
 export function Header({ profile }: { profile: Profile | null }) {
   const router = useRouter();
+  const { t } = useI18n();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
@@ -27,21 +31,16 @@ export function Header({ profile }: { profile: Profile | null }) {
   }
 
   const navLinks = [
-    { href: "/", label: "Beranda" },
-    { href: "/products", label: "Katalog" },
-    { href: "/vouchers", label: "Voucher" },
+    { href: "/", label: t("nav.home") },
+    { href: "/products", label: t("nav.catalog") },
+    { href: "/vouchers", label: t("nav.vouchers") },
   ];
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-lg">
       <div className="mx-auto flex h-16 max-w-7xl items-center gap-4 px-4">
-        <Link href="/" className="flex items-center gap-2 shrink-0">
-          <span className="grid h-8 w-8 place-items-center rounded-md bg-primary text-primary-foreground font-bold">
-            X
-          </span>
-          <span className="hidden font-bold tracking-tight sm:block">
-            X-VIBE<span className="text-primary">SHOP</span>
-          </span>
+        <Link href="/" aria-label="X-VIBE-SHOP" className="shrink-0">
+          <BrandWordmark />
         </Link>
 
         <nav className="hidden items-center gap-1 md:flex">
@@ -61,19 +60,13 @@ export function Header({ profile }: { profile: Profile | null }) {
         </div>
 
         <div className="ml-auto flex items-center gap-1 md:ml-0">
+          <LanguageSwitcher compact />
           <ThemeToggle />
           <CartButton />
 
           {profile ? (
             <div className="hidden items-center gap-1 md:flex">
-              {profile.role === "admin" && (
-                <Button asChild variant="ghost" size="icon" title="Dashboard admin">
-                  <Link href="/admin">
-                    <LayoutDashboard className="h-5 w-5" />
-                  </Link>
-                </Button>
-              )}
-              <Button asChild variant="ghost" size="icon" title="Profil">
+              <Button asChild variant="ghost" size="icon" title={t("nav.profile")}>
                 <Link href="/profile">
                   <User className="h-5 w-5" />
                 </Link>
@@ -81,7 +74,7 @@ export function Header({ profile }: { profile: Profile | null }) {
               <Button
                 variant="ghost"
                 size="icon"
-                title="Keluar"
+                title={t("nav.logout")}
                 onClick={handleLogout}
                 loading={loggingOut}
               >
@@ -90,7 +83,7 @@ export function Header({ profile }: { profile: Profile | null }) {
             </div>
           ) : (
             <Button asChild size="sm" className="hidden md:inline-flex">
-              <Link href="/login">Masuk</Link>
+              <Link href="/login">{t("nav.login")}</Link>
             </Button>
           )}
 
@@ -124,9 +117,9 @@ export function Header({ profile }: { profile: Profile | null }) {
               <Link
                 href="/admin"
                 onClick={() => setMobileOpen(false)}
-                className="rounded-md px-3 py-2 text-sm font-medium hover:bg-secondary"
+                className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium hover:bg-secondary"
               >
-                Dashboard Admin
+                <LayoutDashboard className="h-4 w-4" /> {t("nav.admin")}
               </Link>
             )}
             {profile ? (
@@ -136,20 +129,20 @@ export function Header({ profile }: { profile: Profile | null }) {
                   onClick={() => setMobileOpen(false)}
                   className="rounded-md px-3 py-2 text-sm font-medium hover:bg-secondary"
                 >
-                  Profil Saya
+                  {t("nav.profile")}
                 </Link>
                 <Link
                   href="/orders"
                   onClick={() => setMobileOpen(false)}
                   className="rounded-md px-3 py-2 text-sm font-medium hover:bg-secondary"
                 >
-                  Pesanan Saya
+                  {t("nav.orders")}
                 </Link>
                 <button
                   onClick={handleLogout}
                   className="rounded-md px-3 py-2 text-left text-sm font-medium text-destructive hover:bg-secondary"
                 >
-                  Keluar
+                  {t("nav.logout")}
                 </button>
               </>
             ) : (
@@ -158,7 +151,7 @@ export function Header({ profile }: { profile: Profile | null }) {
                 onClick={() => setMobileOpen(false)}
                 className="mt-1 rounded-md bg-primary px-3 py-2 text-center text-sm font-medium text-primary-foreground"
               >
-                Masuk / Daftar
+                {t("nav.login")}
               </Link>
             )}
           </nav>

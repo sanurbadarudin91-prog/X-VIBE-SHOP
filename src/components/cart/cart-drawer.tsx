@@ -7,6 +7,7 @@ import { Minus, Plus, ShoppingBag, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useCart } from "@/components/cart/cart-provider";
+import { useOptionalI18n } from "@/lib/i18n/provider";
 import { formatIDR } from "@/lib/utils";
 import {
   removeCartItem,
@@ -15,6 +16,7 @@ import {
 
 export function CartDrawer() {
   const { items, open, setOpen, refresh } = useCart();
+  const { t } = useOptionalI18n();
   const [pending, startTransition] = useTransition();
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -104,7 +106,12 @@ export function CartDrawer() {
                       </span>
                       {item.variant_color && (
                         <span className="text-xs text-muted-foreground">
-                          Warna: {item.variant_color}
+                          {t("cart.color")}: {item.variant_color}
+                        </span>
+                      )}
+                      {item.variant_size && (
+                        <span className="text-xs text-muted-foreground">
+                          {t("cart.size")}: {item.variant_size}
                         </span>
                       )}
                       <div className="mt-auto flex items-center justify-between">

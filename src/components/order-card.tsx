@@ -14,6 +14,8 @@ import {
   simulatePayment,
 } from "@/lib/actions/orders";
 import { formatDate, formatIDR } from "@/lib/utils";
+import { variantLabel } from "@/lib/variants";
+import { useOptionalI18n } from "@/lib/i18n/provider";
 import { ORDER_STATUS_LABELS, type Order, type OrderStatus } from "@/lib/types";
 
 declare global {
@@ -68,6 +70,7 @@ export function OrderCard({
   midtransProduction?: boolean;
 }) {
   const router = useRouter();
+  const { t } = useOptionalI18n();
   const [pending, startTransition] = useTransition();
 
   useEffect(() => {
@@ -165,8 +168,10 @@ export function OrderCard({
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {item.quantity} × {formatIDR(item.price_at_purchase)}
-                  {item.variant_color && (
-                    <span className="text-muted-foreground"> · {item.variant_color}</span>
+                  {variantLabel(item.variant_color, item.variant_size) && (
+                    <span className="text-muted-foreground">
+                      {" "}· {variantLabel(item.variant_color, item.variant_size)}
+                    </span>
                   )}
                 </p>
               </div>
@@ -186,7 +191,7 @@ export function OrderCard({
 
         {order.shipping_address_json && (
           <p className="rounded-md bg-secondary/50 p-2 text-xs text-muted-foreground">
-            Kirim ke: {order.shipping_address_json.recipient_name} —{" "}
+            {t("orders.shipTo")}: {order.shipping_address_json.recipient_name} —{" "}
             {order.shipping_address_json.street_address},{" "}
             {order.shipping_address_json.city}
           </p>
@@ -196,11 +201,11 @@ export function OrderCard({
           <div className="flex flex-col gap-2 sm:flex-row">
             {midtransEnabled ? (
               <Button className="flex-1" loading={pending} onClick={payWithMidtrans}>
-                <CreditCard className="h-4 w-4" /> Bayar Sekarang
+                <CreditCard className="h-4 w-4" /> {t("orders.pay")}
               </Button>
             ) : (
               <Button className="flex-1" loading={pending} onClick={simulate}>
-                <CheckCircle2 className="h-4 w-4" /> Simulasikan Pembayaran
+                <CheckCircle2 className="h-4 w-4" /> {t("orders.simulate")}
               </Button>
             )}
             <Button
@@ -209,7 +214,7 @@ export function OrderCard({
               loading={pending}
               onClick={cancel}
             >
-              <XCircle className="h-4 w-4" /> Batalkan
+              <XCircle className="h-4 w-4" /> {t("orders.cancel")}
             </Button>
           </div>
         )}

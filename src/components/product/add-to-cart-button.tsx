@@ -7,12 +7,14 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useCart } from "@/components/cart/cart-provider";
 import { addToCart } from "@/lib/actions/cart";
+import { useOptionalI18n } from "@/lib/i18n/provider";
 import { cn } from "@/lib/utils";
 
 export function AddToCartButton({
   productId,
   stock,
   variantColor = null,
+  variantSize = null,
   buyNow = false,
   className,
   fullWidth = false,
@@ -20,11 +22,13 @@ export function AddToCartButton({
   productId: string;
   stock: number;
   variantColor?: string | null;
+  variantSize?: string | null;
   buyNow?: boolean;
   className?: string;
   fullWidth?: boolean;
 }) {
   const router = useRouter();
+  const { t } = useOptionalI18n();
   const { refresh, setOpen } = useCart();
   const [pending, startTransition] = useTransition();
   const [done, setDone] = useState(false);
@@ -34,7 +38,7 @@ export function AddToCartButton({
   function handleClick() {
     if (disabled) return;
     startTransition(async () => {
-      const res = await addToCart(productId, 1, variantColor);
+      const res = await addToCart(productId, 1, variantColor, variantSize);
       if (!res.ok) {
         toast.error(res.message);
         if (res.message.includes("login")) router.push("/login");
@@ -62,7 +66,13 @@ export function AddToCartButton({
     >
       {!pending &&
         (buyNow ? <Zap className="h-4 w-4" /> : <ShoppingCart className="h-4 w-4" />)}
-      {disabled ? "Stok Habis" : buyNow ? "Beli Langsung" : done ? "Ditambahkan!" : "Tambah ke Keranjang"}
+      {disabled
+        ? t("product.outOfStock")
+        : buyNow
+          ? t("product.buyNow")
+          : done
+            ? t("product.added")
+            : t("product.addToCart")}
     </Button>
   );
 }

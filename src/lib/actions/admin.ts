@@ -35,6 +35,8 @@ export interface ProductInput {
   image_url: string;
   images: string[];
   colors: string[];
+  color_hex: Record<string, string>;
+  sizes: string[];
   variant_stock: Record<string, number>;
 }
 
@@ -46,20 +48,34 @@ export async function saveProduct(input: ProductInput): Promise<ActionResult> {
   if (images.length > MAX_PRODUCT_IMAGES)
     return { ok: false, message: `Maksimal ${MAX_PRODUCT_IMAGES} foto per produk.` };
 
-  // Normalisasi varian: hanya warna unik dengan stok bilangan bulat >= 0.
+  // Normalisasi varian: warna & ukuran unik, kode hex, serta stok per kombinasi.
   const colors: string[] = [];
-  const variantStock: Record<string, number> = {};
+  const colorHex: Record<string, string> = {};
   for (const raw of input.colors ?? []) {
     const color = raw.trim();
     if (!color || colors.includes(color)) continue;
     colors.push(color);
-    const qty = Math.max(0, Math.floor(Number(input.variant_stock?.[raw] ?? 0) || 0));
-    variantStock[color] = qty;
+    const hex = (input.color_hex?.[raw] ?? "").trim();
+    colorHex[color] = /^#[0-9a-fA-F]{3,8}$/.test(hex) ? hex : "#888888";
   }
 
-  // Bila ada varian warna, stok total = jumlah stok seluruh varian.
-  const stock = colors.length
-    ? colors.reduce((sum, c) => sum + variantStock[c], 0)
+  const sizes: string[] = [];
+  for (const raw of input.sizes ?? []) {
+    const size = raw.trim();
+    if (!size || sizes.includes(size)) continue;
+    sizes.push(size);
+  }
+
+  // Kunci stok varian mengikuti public.variant_key: "warna|ukuran".
+  const variantStock: Record<string, number> = {};
+  for (const [key, value] of Object.entries(input.variant_stock ?? {})) {
+    variantStock[key] = Math.max(0, Math.floor(Number(value) || 0));
+  }
+
+  // Bila ada varian, stok total = jumlah stok seluruh kombinasi varian.
+  const hasVariants = colors.length > 0 || sizes.length > 0;
+  const stock = hasVariants
+    ? Object.values(variantStock).reduce((sum, n) => sum + n, 0)
     : Math.max(0, Math.floor(Number(input.stock) || 0));
 
   const payload = {
@@ -72,6 +88,8 @@ export async function saveProduct(input: ProductInput): Promise<ActionResult> {
     image_url: images[0] ?? (input.image_url.trim() || null),
     images,
     colors,
+    color_hex: colorHex,
+    sizes,
     variant_stock: variantStock,
   };
 
@@ -88,8 +106,8 @@ export async function saveProduct(input: ProductInput): Promise<ActionResult> {
       return {
         ok: false,
         message:
-          "Skema database belum mendukung galeri/varian. Jalankan migrasi " +
-          "supabase/migrations/20261114_product_variants.sql di Supabase, lalu coba lagi.",
+          "Skema database belum mendukung varian warna/ukuran. Jalankan migrasi " +
+          "supabase/migrations/20261120_product_sizes_hex.sql di Supabase, lalu coba lagi.",
       };
     return { ok: false, message: error.message };
   }

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { ProductGallery } from "@/components/product/product-gallery";
 import { ProductPurchasePanel } from "@/components/product/product-purchase-panel";
 import { getProduct } from "@/lib/queries";
+import { getTranslator } from "@/lib/i18n/server";
 import { formatIDR } from "@/lib/utils";
 
 export async function generateMetadata({
@@ -30,7 +31,7 @@ export default async function ProductDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const { id } = await params;
+  const [{ id }, { t }] = await Promise.all([params, getTranslator()]);
   const product = await getProduct(id);
   if (!product) notFound();
 
@@ -41,15 +42,17 @@ export default async function ProductDetailPage({
         ? [product.image_url]
         : [];
   const colors = product.colors ?? [];
+  const sizes = product.sizes ?? [];
+  const colorHex = product.color_hex ?? {};
   const variantStock = product.variant_stock ?? {};
   const avgRating =
     SAMPLE_REVIEWS.reduce((s, r) => s + r.rating, 0) / SAMPLE_REVIEWS.length;
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8">
+    <div className="mx-auto max-w-7xl px-4 py-6">
       <Button asChild variant="ghost" size="sm" className="mb-4">
         <Link href="/products">
-          <ArrowLeft className="h-4 w-4" /> Kembali ke katalog
+          <ArrowLeft className="h-4 w-4" /> {t("product.backToCatalog")}
         </Link>
       </Button>
 
@@ -73,7 +76,7 @@ export default async function ProductDetailPage({
               ))}
             </span>
             <span className="text-muted-foreground">
-              {avgRating.toFixed(1)} • {SAMPLE_REVIEWS.length} ulasan
+              {avgRating.toFixed(1)} • {SAMPLE_REVIEWS.length} {t("product.reviews")}
             </span>
           </div>
 
@@ -83,7 +86,7 @@ export default async function ProductDetailPage({
 
           <div className="mt-3 flex items-center gap-3 text-sm">
             <span className="inline-flex items-center gap-1 text-muted-foreground">
-              <Truck className="h-4 w-4" /> Estimasi 1–3 hari
+              <Truck className="h-4 w-4" /> {t("product.eta")}
             </span>
           </div>
 
@@ -92,7 +95,7 @@ export default async function ProductDetailPage({
           </p>
 
           <ul className="mt-5 space-y-1.5 text-sm text-muted-foreground">
-            {["Garansi kualitas produk", "Bisa retur 7 hari", "Pembayaran aman"].map(
+            {[t("product.guarantee"), t("product.return"), t("product.secure")].map(
               (f) => (
                 <li key={f} className="flex items-center gap-2">
                   <Check className="h-4 w-4 text-emerald-500" /> {f}
@@ -106,6 +109,8 @@ export default async function ProductDetailPage({
               productId={product.id}
               stock={product.stock}
               colors={colors}
+              sizes={sizes}
+              colorHex={colorHex}
               variantStock={variantStock}
             />
           </div>
@@ -113,8 +118,8 @@ export default async function ProductDetailPage({
       </div>
 
       {product.caption && (
-        <section className="mt-12 rounded-xl border border-border bg-card p-6">
-          <h2 className="mb-4 text-xl font-bold">Detail Produk</h2>
+        <section className="mt-12 rounded-2xl border border-border bg-card p-6">
+          <h2 className="mb-4 text-xl font-bold">{t("product.detail")}</h2>
           <div className="whitespace-pre-line leading-relaxed text-muted-foreground">
             {product.caption}
           </div>
@@ -122,10 +127,10 @@ export default async function ProductDetailPage({
       )}
 
       <section className="mt-12">
-        <h2 className="mb-4 text-xl font-bold">Ulasan Pembeli</h2>
+        <h2 className="mb-4 text-xl font-bold">{t("product.reviews")}</h2>
         <div className="grid gap-4 sm:grid-cols-3">
           {SAMPLE_REVIEWS.map((r) => (
-            <div key={r.name} className="rounded-lg border border-border bg-card p-4">
+            <div key={r.name} className="rounded-2xl border border-border bg-card p-4">
               <div className="flex items-center justify-between">
                 <span className="font-medium">{r.name}</span>
                 <span className="flex text-amber-500">

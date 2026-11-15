@@ -2,6 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import {
+  variantStock as resolveVariantStock,
+  variantLabel,
+  type VariantSource,
+} from "@/lib/variants";
 
 export type ActionResult = { ok: boolean; message: string };
 
@@ -17,9 +22,11 @@ export async function addToCart(
   productId: string,
   quantity = 1,
   variantColor: string | null = null,
+  variantSize: string | null = null,
 ): Promise<ActionResult> {
   const { supabase, user } = await requireUser();
   if (!user) return { ok: false, message: "Silakan login terlebih dahulu." };
+  const userId = user.id;
 
   const { data: product } = await supabase
     .from("products")
@@ -32,39 +39,64 @@ export async function addToCart(
   const p = product as {
     stock: number;
     colors: string[] | null;
+    sizes: string[] | null;
     variant_stock: Record<string, number> | null;
   };
   const colors = p.colors ?? [];
+  const sizes = p.sizes ?? [];
 
-  // Produk bervarian wajib memilih warna; stok mengikuti varian tersebut.
+  // Produk bervarian wajib memilih opsi; stok mengikuti kombinasi varian.
   if (colors.length > 0 && !variantColor)
     return { ok: false, message: "Silakan pilih warna terlebih dahulu." };
   if (variantColor && colors.length > 0 && !colors.includes(variantColor))
     return { ok: false, message: "Warna tidak tersedia untuk produk ini." };
+  if (sizes.length > 0 && !variantSize)
+    return { ok: false, message: "Silakan pilih ukuran terlebih dahulu." };
+  if (variantSize && sizes.length > 0 && !sizes.includes(variantSize))
+    return { ok: false, message: "Ukuran tidak tersedia untuk produk ini." };
 
-  const available =
-    variantColor && p.variant_stock && variantColor in p.variant_stock
-      ? Number(p.variant_stock[variantColor])
-      : p.stock;
+  const available = resolveVariantStock(
+    { stock: p.stock, variant_stock: p.variant_stock ?? {} },
+    variantColor,
+    variantSize,
+  );
 
-  // Keranjang unik per (user, produk, warna). Kolom `variant_color` hanya
-  // disentuh bila memang ada warna terpilih, agar tetap jalan di DB yang belum
+  // Keranjang unik per (user, produk, warna, ukuran). Kolom varian hanya
+  // disentuh bila memang ada nilai, agar tetap jalan di DB yang belum
   // menjalankan migrasi varian.
-  const existingQuery = supabase
-    .from("cart_items")
-    .select("id, quantity")
-    .eq("user_id", user.id)
-    .eq("product_id", productId);
-  const { data: existing } = await (variantColor
-    ? existingQuery.eq("variant_color", variantColor)
-    : existingQuery
-  ).maybeSingle();
+  function findExisting() {
+    const q = supabase
+      .from("cart_items")
+      .select("id, quantity")
+      .eq("user_id", userId)
+      .eq("product_id", productId);
+    if (variantColor) q.eq("variant_color", variantColor);
+    if (variantSize) q.eq("variant_size", variantSize);
+    return q.maybeSingle();
+  }
+
+  const found = await findExisting();
+  let existing = found.data;
+  const findError = found.error;
+  // 42703 = kolom varian belum ada di DB ini; cari tanpa filter varian.
+  if (findError?.code === "42703") {
+    ({ data: existing } = await supabase
+      .from("cart_items")
+      .select("id, quantity")
+      .eq("user_id", userId)
+      .eq("product_id", productId)
+      .maybeSingle());
+  }
 
   const newQty = (existing?.quantity ?? 0) + quantity;
   if (newQty > available)
     return {
       ok: false,
-      message: `Stok${variantColor ? ` warna ${variantColor}` : ""} tersisa ${available}.`,
+      message: `Stok${
+        variantLabel(variantColor, variantSize)
+          ? ` ${variantLabel(variantColor, variantSize)}`
+          : ""
+      } tersisa ${available}.`,
     };
 
   const { error } = existing
@@ -73,13 +105,24 @@ export async function addToCart(
         .update({ quantity: newQty })
         .eq("id", existing.id)
     : await supabase.from("cart_items").insert({
-        user_id: user.id,
+        user_id: userId,
         product_id: productId,
         quantity,
         ...(variantColor ? { variant_color: variantColor } : {}),
+        ...(variantSize ? { variant_size: variantSize } : {}),
       });
 
-  if (error) return { ok: false, message: error.message };
+  if (error) {
+    // 42703 = kolom varian belum ada (migrasi varian belum dijalankan).
+    if (error.code === "42703" && (variantColor || variantSize))
+      return {
+        ok: false,
+        message:
+          "Varian warna/ukuran belum aktif di database. Jalankan migrasi " +
+          "supabase/migrations/20261120_product_sizes_hex.sql di Supabase.",
+      };
+    return { ok: false, message: error.message };
+  }
 
   revalidatePath("/cart");
   revalidatePath("/");
@@ -97,31 +140,33 @@ export async function updateCartQuantity(
 
   const { data: item } = await supabase
     .from("cart_items")
-    .select("product_id, products(*)")
+    .select("products(*)")
     .eq("id", cartItemId)
     .eq("user_id", user.id)
     .single();
 
-  // Warna dibaca terpisah: bila kolom `variant_color` belum ada (migrasi belum
-  // jalan), pembacaan gagal dan cukup dianggap tanpa varian.
+  // Kolom varian dibaca terpisah: bila belum ada (migrasi belum jalan),
+  // kegagalan cukup dianggap tanpa varian.
   let variantColor: string | null = null;
-  const vc = await supabase
+  let variantSize: string | null = null;
+  const variant = await supabase
     .from("cart_items")
-    .select("variant_color")
+    .select("variant_color, variant_size")
     .eq("id", cartItemId)
     .single();
-  if (!vc.error)
-    variantColor = (vc.data as { variant_color: string | null } | null)?.variant_color ?? null;
+  if (!variant.error) {
+    const row = variant.data as {
+      variant_color: string | null;
+      variant_size: string | null;
+    } | null;
+    variantColor = row?.variant_color ?? null;
+    variantSize = row?.variant_size ?? null;
+  }
 
-  const row = item as
-    | { products: { stock: number; variant_stock?: Record<string, number> | null } | null }
-    | null;
+  const product = (item as { products: VariantSource | null } | null)?.products;
+  if (!product) return { ok: false, message: "Produk tidak ditemukan." };
 
-  const variantStock = row?.products?.variant_stock;
-  const stock =
-    variantColor && variantStock?.[variantColor] != null
-      ? Number(variantStock[variantColor])
-      : row?.products?.stock ?? 0;
+  const stock = resolveVariantStock(product, variantColor, variantSize);
 
   if (quantity > stock)
     return { ok: false, message: `Stok tersisa hanya ${stock}.` };

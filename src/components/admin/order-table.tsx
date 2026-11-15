@@ -2,23 +2,23 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Search } from "lucide-react";
+import { Search, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { updateOrderStatus } from "@/lib/actions/orders";
 import { formatDate, formatIDR } from "@/lib/utils";
-import { ORDER_STATUS_LABELS, type Order, type OrderStatus } from "@/lib/types";
-
-const STATUSES: OrderStatus[] = [
-  "pending",
-  "paid",
-  "shipped",
-  "completed",
-  "cancelled",
-];
+import { variantLabel } from "@/lib/variants";
+import {
+  ORDER_STAGES,
+  ORDER_STATUS_LABELS,
+  type Order,
+  type OrderStatus,
+} from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 const TONE: Record<
   OrderStatus,
@@ -67,6 +67,9 @@ function OrderRow({ order }: { order: Order }) {
           {(order.order_items ?? []).map((it) => (
             <li key={it.id}>
               {it.quantity}× {it.products?.title ?? "Produk"}
+              {variantLabel(it.variant_color, it.variant_size) && (
+                <span> ({variantLabel(it.variant_color, it.variant_size)})</span>
+              )}
             </li>
           ))}
         </ul>
@@ -76,19 +79,45 @@ function OrderRow({ order }: { order: Order }) {
         <Badge tone={TONE[order.status]}>{ORDER_STATUS_LABELS[order.status]}</Badge>
       </td>
       <td className="p-3">
-        <Select
-          value={order.status}
-          disabled={pending}
-          onChange={(e) => change(e.target.value as OrderStatus)}
-          aria-label="Ubah status pesanan"
-          className="h-9 w-40"
-        >
-          {STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {ORDER_STATUS_LABELS[s]}
-            </option>
-          ))}
-        </Select>
+        {/* Status pesanan disederhanakan menjadi 3 tahap: Menunggu, Dikirim, Diterima. */}
+        <div className="flex items-center gap-1">
+          <div className="inline-flex rounded-xl border border-border p-0.5">
+            {ORDER_STAGES.map((stage) => {
+              const active = order.status === stage.status;
+              const done =
+                ORDER_STAGES.findIndex((s) => s.status === order.status) >=
+                ORDER_STAGES.findIndex((s) => s.status === stage.status);
+              return (
+                <Button
+                  key={stage.status}
+                  size="sm"
+                  variant={active ? "default" : "ghost"}
+                  disabled={pending}
+                  onClick={() => change(stage.status)}
+                  className={cn(
+                    "h-8 rounded-lg px-3 text-xs",
+                    !active && done && "text-primary",
+                  )}
+                >
+                  {stage.label}
+                </Button>
+              );
+            })}
+          </div>
+          {order.status !== "cancelled" && order.status !== "completed" && (
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8 text-destructive hover:text-destructive"
+              disabled={pending}
+              onClick={() => change("cancelled")}
+              aria-label="Batalkan pesanan"
+              title="Batalkan pesanan"
+            >
+              <XCircle className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
       </td>
     </tr>
   );
@@ -144,11 +173,13 @@ export function OrderTable({ orders }: { orders: Order[] }) {
           className="sm:w-56"
         >
           <option value="all">Semua status</option>
-          {STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {ORDER_STATUS_LABELS[s]}
-            </option>
-          ))}
+          {(["pending", "paid", "shipped", "completed", "cancelled"] as OrderStatus[]).map(
+            (s) => (
+              <option key={s} value={s}>
+                {ORDER_STATUS_LABELS[s]}
+              </option>
+            ),
+          )}
         </Select>
       </div>
 

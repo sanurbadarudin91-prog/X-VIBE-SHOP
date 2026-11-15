@@ -27,11 +27,18 @@ select * from (values
 ) as v(code, discount_type, discount_value, min_purchase, expiry_date, is_active)
 where not exists (select 1 from public.vouchers x where x.code = v.code);
 
--- Demo varian warna + galeri multi-foto untuk produk apparel terpilih.
--- Stok total produk disamakan dengan jumlah stok tiap varian.
+-- Demo varian warna + ukuran, kode warna, dan galeri multi-foto untuk produk
+-- apparel terpilih. Stok total produk disamakan dengan jumlah stok tiap varian.
 update public.products set
   colors        = '["Hitam","Navy","Sage Green","Maroon"]'::jsonb,
-  variant_stock = '{"Hitam":15,"Navy":8,"Sage Green":6,"Maroon":4}'::jsonb,
+  color_hex     = '{"Hitam":"#111827","Navy":"#1e3a8a","Sage Green":"#9ca88a","Maroon":"#7f1d1d"}'::jsonb,
+  sizes         = '["M","L","XL"]'::jsonb,
+  variant_stock = '{
+    "Hitam|M":6,"Hitam|L":5,"Hitam|XL":4,
+    "Navy|M":3,"Navy|L":3,"Navy|XL":2,
+    "Sage Green|M":2,"Sage Green|L":2,"Sage Green|XL":2,
+    "Maroon|M":2,"Maroon|L":1,"Maroon|XL":1
+  }'::jsonb,
   stock         = 33,
   images        = case
                     when image_url is null then '[]'::jsonb

@@ -41,6 +41,8 @@ export interface Product {
   image_url: string | null;
   images: string[];
   colors: string[];
+  color_hex: Record<string, string>;
+  sizes: string[];
   variant_stock: Record<string, number>;
   created_at: string;
 }
@@ -51,6 +53,7 @@ export interface CartItem {
   product_id: string;
   quantity: number;
   variant_color: string | null;
+  variant_size: string | null;
   created_at: string;
   products?: Product;
 }
@@ -78,6 +81,7 @@ export interface OrderItem {
   quantity: number;
   price_at_purchase: number;
   variant_color: string | null;
+  variant_size: string | null;
   products?: Pick<Product, "title" | "image_url"> | null;
 }
 
@@ -110,11 +114,18 @@ export interface ShippingAddress {
 
 export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   pending: "Menunggu Pembayaran",
-  paid: "Dibayar",
+  paid: "Menunggu",
   shipped: "Dikirim",
-  completed: "Selesai",
+  completed: "Diterima",
   cancelled: "Dibatalkan",
 };
+
+/** Tiga tahapan fulfillment yang ditampilkan pada panel admin. */
+export const ORDER_STAGES: { status: OrderStatus; label: string }[] = [
+  { status: "paid", label: "Menunggu" },
+  { status: "shipped", label: "Dikirim" },
+  { status: "completed", label: "Diterima" },
+];
 
 export const ORDER_STATUS_FLOW: OrderStatus[] = [
   "pending",

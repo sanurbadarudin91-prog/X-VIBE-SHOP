@@ -59,6 +59,8 @@ create table if not exists public.products (
   image_url   text,
   images      jsonb not null default '[]'::jsonb,
   colors      jsonb not null default '[]'::jsonb,
+  color_hex   jsonb not null default '{}'::jsonb,
+  sizes       jsonb not null default '[]'::jsonb,
   variant_stock jsonb not null default '{}'::jsonb,
   created_at  timestamptz not null default now()
 );
@@ -72,6 +74,8 @@ alter table public.products
   add column if not exists caption       text,
   add column if not exists images        jsonb not null default '[]'::jsonb,
   add column if not exists colors        jsonb not null default '[]'::jsonb,
+  add column if not exists color_hex     jsonb not null default '{}'::jsonb,
+  add column if not exists sizes         jsonb not null default '[]'::jsonb,
   add column if not exists variant_stock jsonb not null default '{}'::jsonb;
 
 -- ---------------------------------------------------------------------------
@@ -87,17 +91,23 @@ create table if not exists public.cart_items (
 
 create index if not exists cart_items_user_id_idx on public.cart_items (user_id);
 
--- Varian warna pada item keranjang (idempoten).
+-- Varian warna & ukuran pada item keranjang (idempoten).
 alter table public.cart_items
-  add column if not exists variant_color text;
+  add column if not exists variant_color text,
+  add column if not exists variant_size  text;
 
--- Satu baris per (user, produk, warna). Batasan unik lama (user, product)
--- dihapus agar satu produk bisa masuk dengan beberapa warna berbeda.
+-- Satu baris per (user, produk, warna, ukuran). Batasan unik lama (user, product)
+-- dihapus agar satu produk bisa masuk dengan beberapa varian berbeda.
 alter table public.cart_items
   drop constraint if exists cart_items_user_id_product_id_key;
 
 create unique index if not exists cart_items_user_product_variant_idx
-  on public.cart_items (user_id, product_id, coalesce(variant_color, ''));
+  on public.cart_items (
+    user_id,
+    product_id,
+    coalesce(variant_color, ''),
+    coalesce(variant_size, '')
+  );
 
 -- ---------------------------------------------------------------------------
 -- 5. ORDERS
@@ -141,9 +151,10 @@ create table if not exists public.order_items (
 
 create index if not exists order_items_order_id_idx on public.order_items (order_id);
 
--- Varian warna pada item pesanan (idempoten).
+-- Varian warna & ukuran pada item pesanan (idempoten).
 alter table public.order_items
-  add column if not exists variant_color text;
+  add column if not exists variant_color text,
+  add column if not exists variant_size  text;
 
 -- ---------------------------------------------------------------------------
 -- 7. VOUCHERS
@@ -243,6 +254,95 @@ create trigger addresses_single_default
   for each row when (new.is_default)
   execute function public.enforce_single_default_address();
 
+-- Kunci kanonik sebuah kombinasi varian, mis. "Hitam|M" atau "Hitam|".
+create or replace function public.variant_key(p_color text, p_size text)
+returns text
+language sql
+immutable
+as $$
+  select coalesce(nullif(btrim(p_color), ''), '') || '|' ||
+         coalesce(nullif(btrim(p_size), ''), '');
+$$;
+
+-- Stok tersedia untuk sebuah kombinasi varian. Mencari kunci gabungan lebih
+-- dulu, lalu warna saja / ukuran saja (kompatibel dengan data varian lama),
+-- dan akhirnya jatuh ke stok total produk.
+create or replace function public.variant_available(
+  p_stock jsonb,
+  p_color text,
+  p_size text,
+  p_fallback integer
+)
+returns integer
+language plpgsql
+immutable
+as $$
+declare
+  v_color text := nullif(btrim(p_color), '');
+  v_size  text := nullif(btrim(p_size), '');
+  v_val   text;
+begin
+  if p_stock is null then
+    return coalesce(p_fallback, 0);
+  end if;
+
+  v_val := p_stock ->> public.variant_key(v_color, v_size);
+  if v_val is not null then return coalesce(v_val::integer, 0); end if;
+
+  if v_color is not null then
+    v_val := p_stock ->> v_color;
+    if v_val is not null then return coalesce(v_val::integer, 0); end if;
+  end if;
+
+  if v_size is not null then
+    v_val := p_stock ->> v_size;
+    if v_val is not null then return coalesce(v_val::integer, 0); end if;
+  end if;
+
+  return coalesce(p_fallback, 0);
+end;
+$$;
+
+-- Terapkan delta stok pada kunci varian yang cocok. Bila tidak ada kunci yang
+-- cocok, stok varian dibiarkan (stok total produk yang berubah).
+create or replace function public.variant_apply(
+  p_stock jsonb,
+  p_color text,
+  p_size text,
+  p_delta integer
+)
+returns jsonb
+language plpgsql
+immutable
+as $$
+declare
+  v_stock jsonb := coalesce(p_stock, '{}'::jsonb);
+  v_color text := nullif(btrim(p_color), '');
+  v_size  text := nullif(btrim(p_size), '');
+  v_use   text;
+  v_cur   integer;
+begin
+  if v_color is null and v_size is null then
+    return v_stock;
+  end if;
+
+  if v_stock ? public.variant_key(v_color, v_size) then
+    v_use := public.variant_key(v_color, v_size);
+  elsif v_color is not null and v_stock ? v_color then
+    v_use := v_color;
+  elsif v_size is not null and v_stock ? v_size then
+    v_use := v_size;
+  else
+    return v_stock;
+  end if;
+
+  v_cur := coalesce((v_stock ->> v_use)::integer, 0) + p_delta;
+  if v_cur < 0 then v_cur := 0; end if;
+
+  return jsonb_set(v_stock, array[v_use], to_jsonb(v_cur));
+end;
+$$;
+
 -- Inti pengurangan/penambahan stok tanpa cek auth (dipakai fungsi tepercaya).
 create or replace function public.apply_stock_delta(p_order_id uuid, p_sign integer)
 returns void
@@ -252,10 +352,10 @@ set search_path = public
 as $$
 declare
   r record;
-  v_new integer;
 begin
   for r in
-    select oi.product_id, oi.quantity, oi.variant_color, p.variant_stock
+    select oi.product_id, oi.quantity, oi.variant_color, oi.variant_size,
+           p.variant_stock
       from public.order_items oi
       join public.products p on p.id = oi.product_id
      where oi.order_id = p_order_id
@@ -271,18 +371,13 @@ begin
        where id = r.product_id;
     end if;
 
-    -- Selaraskan stok per varian warna bila warna item terdaftar di produk.
-    if r.variant_color is not null and jsonb_exists(r.variant_stock, r.variant_color) then
-      v_new := coalesce((r.variant_stock ->> r.variant_color)::integer, 0) +
-               (case when p_sign >= 0 then r.quantity else -r.quantity end);
-      if v_new < 0 then
-        v_new := 0;
-      end if;
+    if r.variant_color is not null or r.variant_size is not null then
       update public.products
-         set variant_stock = jsonb_set(
+         set variant_stock = public.variant_apply(
                variant_stock,
-               array[r.variant_color],
-               to_jsonb(v_new)
+               r.variant_color,
+               r.variant_size,
+               case when p_sign >= 0 then r.quantity else -r.quantity end
              )
        where id = r.product_id;
     end if;
@@ -414,6 +509,7 @@ declare
   v_voucher record;
   v_voucher_id uuid;
   v_available integer;
+  v_variant text;
   r record;
 begin
   if v_uid is null then
@@ -433,23 +529,28 @@ begin
 
   for r in
     select p.id, p.title, p.price, p.stock, p.variant_stock, c.quantity,
-           c.variant_color
+           c.variant_color, c.variant_size
       from public.cart_items c
       join public.products p on p.id = c.product_id
      where c.user_id = v_uid
   loop
-    -- Bila varian warna dipilih dan produk punya stok per warna, validasi stok
-    -- varian tersebut; jika tidak, jatuh ke stok total produk.
-    if r.variant_color is not null and jsonb_exists(r.variant_stock, r.variant_color) then
-      v_available := coalesce((r.variant_stock ->> r.variant_color)::integer, 0);
-    else
-      v_available := r.stock;
-    end if;
+    v_available := public.variant_available(
+      r.variant_stock, r.variant_color, r.variant_size, r.stock
+    );
 
     if r.quantity > v_available then
+      v_variant := null;
+      if r.variant_color is not null then v_variant := r.variant_color; end if;
+      if r.variant_size is not null then
+        v_variant := case
+          when v_variant is null then r.variant_size
+          else v_variant || ' / ' || r.variant_size
+        end;
+      end if;
+
       raise exception 'Stok "%"% tidak mencukupi (tersisa %)',
         r.title,
-        case when r.variant_color is not null then ' warna ' || r.variant_color else '' end,
+        case when v_variant is not null then ' (' || v_variant || ')' else '' end,
         v_available;
     end if;
     v_subtotal := v_subtotal + r.price * r.quantity;
@@ -490,8 +591,8 @@ begin
   values (v_uid, v_total, 'pending', p_address, v_reference)
   returning id into v_order_id;
 
-  insert into public.order_items (order_id, product_id, quantity, price_at_purchase, variant_color)
-  select v_order_id, c.product_id, c.quantity, p.price, c.variant_color
+  insert into public.order_items (order_id, product_id, quantity, price_at_purchase, variant_color, variant_size)
+  select v_order_id, c.product_id, c.quantity, p.price, c.variant_color, c.variant_size
     from public.cart_items c
     join public.products p on p.id = c.product_id
    where c.user_id = v_uid;
@@ -754,6 +855,9 @@ grant execute on function public.set_order_payment_token(uuid, text, text) to au
 
 -- Helper stok tanpa cek auth: jangan pernah diekspos ke klien.
 revoke all on function public.apply_stock_delta(uuid, integer) from public, anon, authenticated;
+revoke all on function public.variant_key(text, text) from public, anon, authenticated;
+revoke all on function public.variant_available(jsonb, text, text, integer) from public, anon, authenticated;
+revoke all on function public.variant_apply(jsonb, text, text, integer) from public, anon, authenticated;
 
 -- Fungsi webhook: hanya service_role (webhook server-side tepercaya).
 revoke all on function public.mark_order_paid_from_gateway(uuid, text, timestamptz) from public, anon, authenticated;

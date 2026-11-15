@@ -14,15 +14,16 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ProductImagesUploader } from "@/components/admin/product-images-uploader";
 import {
-  VariantColorEditor,
-  type VariantColor,
-} from "@/components/admin/variant-color-editor";
+  VariantEditor,
+  type VariantState,
+} from "@/components/admin/variant-editor";
 import {
   deleteProduct,
   saveProduct,
   type ProductInput,
 } from "@/lib/actions/admin";
 import { MAX_PRODUCT_IMAGES } from "@/lib/product-constants";
+import { colorSwatch } from "@/lib/variants";
 import { formatIDR } from "@/lib/utils";
 import { PRODUCT_CATEGORIES, type Product } from "@/lib/types";
 
@@ -36,22 +37,28 @@ const EMPTY: ProductInput = {
   image_url: "",
   images: [],
   colors: [],
+  color_hex: {},
+  sizes: [],
   variant_stock: {},
 };
 
-/** Ubah array warna + map stok menjadi daftar varian untuk editor. */
-function toVariants(p: Product): VariantColor[] {
-  return (p.colors ?? []).map((name) => ({
-    name,
-    stock: Number(p.variant_stock?.[name] ?? 0),
-  }));
+/** Ubah data produk menjadi state editor varian. */
+function toVariantState(p: Product): VariantState {
+  return {
+    colors: p.colors ?? [],
+    colorHex: p.color_hex ?? {},
+    sizes: p.sizes ?? [],
+    stock: p.variant_stock ?? {},
+  };
 }
 
-function variantsToForm(variants: VariantColor[]) {
-  const colors = variants.map((v) => v.name);
-  const variant_stock: Record<string, number> = {};
-  for (const v of variants) variant_stock[v.name] = Math.max(0, Math.floor(v.stock) || 0);
-  return { colors, variant_stock };
+function variantStateToForm(state: VariantState) {
+  return {
+    colors: state.colors,
+    color_hex: state.colorHex,
+    sizes: state.sizes,
+    variant_stock: state.stock,
+  };
 }
 
 export function ProductManager({ products }: { products: Product[] }) {
@@ -59,7 +66,12 @@ export function ProductManager({ products }: { products: Product[] }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
   const [form, setForm] = useState<ProductInput>(EMPTY);
-  const [variants, setVariants] = useState<VariantColor[]>([]);
+  const [variants, setVariants] = useState<VariantState>({
+    colors: [],
+    colorHex: {},
+    sizes: [],
+    stock: {},
+  });
   const [pending, startTransition] = useTransition();
   const [q, setQ] = useState("");
   const [lowOnly, setLowOnly] = useState(false);
@@ -79,7 +91,7 @@ export function ProductManager({ products }: { products: Product[] }) {
   function openCreate() {
     setEditing(null);
     setForm(EMPTY);
-    setVariants([]);
+    setVariants({ colors: [], colorHex: {}, sizes: [], stock: {} });
     setOpen(true);
   }
 
@@ -96,14 +108,16 @@ export function ProductManager({ products }: { products: Product[] }) {
       image_url: p.image_url ?? "",
       images: p.images ?? (p.image_url ? [p.image_url] : []),
       colors: p.colors ?? [],
+      color_hex: p.color_hex ?? {},
+      sizes: p.sizes ?? [],
       variant_stock: p.variant_stock ?? {},
     });
-    setVariants(toVariants(p));
+    setVariants(toVariantState(p));
     setOpen(true);
   }
 
   function submit() {
-    const payload: ProductInput = { ...form, ...variantsToForm(variants) };
+    const payload: ProductInput = { ...form, ...variantStateToForm(variants) };
     startTransition(async () => {
       const res = await saveProduct(payload);
       if (!res.ok) {
@@ -217,17 +231,27 @@ export function ProductManager({ products }: { products: Product[] }) {
                     </span>
                   </td>
                   <td className="p-3">
-                    {colors.length === 0 ? (
+                    {colors.length === 0 && (p.sizes?.length ?? 0) === 0 ? (
                       <span className="text-xs text-muted-foreground">—</span>
                     ) : (
-                      <div className="flex flex-wrap gap-1">
+                      <div className="flex flex-wrap items-center gap-1">
                         {colors.slice(0, 3).map((c) => (
-                          <Badge key={c} tone="muted">
-                            {c}: {p.variant_stock?.[c] ?? 0}
-                          </Badge>
+                          <span
+                            key={c}
+                            title={c}
+                            className="h-4 w-4 rounded-full border border-border"
+                            style={{ backgroundColor: colorSwatch(c, p.color_hex) }}
+                          />
                         ))}
                         {colors.length > 3 && (
-                          <Badge tone="muted">+{colors.length - 3}</Badge>
+                          <span className="text-xs text-muted-foreground">
+                            +{colors.length - 3}
+                          </span>
+                        )}
+                        {(p.sizes?.length ?? 0) > 0 && (
+                          <Badge tone="muted">
+                            {p.sizes.join(" · ")}
+                          </Badge>
                         )}
                       </div>
                     )}
@@ -320,14 +344,16 @@ export function ProductManager({ products }: { products: Product[] }) {
             </div>
             <div>
               <Label htmlFor="stock">
-                Stok Umum {variants.length > 0 && "(diabaikan — pakai varian)"}
+                Stok Umum{" "}
+                {(variants.colors.length > 0 || variants.sizes.length > 0) &&
+                  "(diabaikan — pakai varian)"}
               </Label>
               <Input
                 id="stock"
                 type="number"
                 min={0}
                 value={form.stock}
-                disabled={variants.length > 0}
+                disabled={variants.colors.length > 0 || variants.sizes.length > 0}
                 onChange={(e) => setForm({ ...form, stock: Number(e.target.value) })}
               />
             </div>
@@ -351,9 +377,9 @@ export function ProductManager({ products }: { products: Product[] }) {
           <div className="rounded-lg border border-border p-3">
             <div className="mb-2 flex items-center gap-2">
               <Layers className="h-4 w-4 text-primary" />
-              <span className="text-sm font-medium">Varian Warna & Stok</span>
+              <span className="text-sm font-medium">Varian Warna & Ukuran</span>
             </div>
-            <VariantColorEditor value={variants} onChange={setVariants} />
+            <VariantEditor value={variants} onChange={setVariants} />
           </div>
 
           <div className="flex justify-end gap-2 pt-2">

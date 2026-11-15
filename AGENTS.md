@@ -130,3 +130,48 @@ Tinggal satu langkah manual: menjalankan migrasi kolom baru ke DB Supabase
 - **Setelah migrasi:** semua fitur aktif tanpa perlu deploy ulang.
 - Alternatif: jalankan `supabase/seed.sql` untuk mengisi contoh varian + caption
   pada produk `Cyber Hoodie Black`.
+
+## Perombakan UI/UX mobile + varian warna×ukuran (2026-11)
+
+Fokus: tampilan ala aplikasi mobile modern, branding baru, i18n, dan varian
+produk dua dimensi.
+
+- **Varian dua dimensi:** `products.sizes jsonb` (daftar ukuran) +
+  `products.color_hex jsonb` (map nama warna → kode hex untuk swatch).
+  `cart_items.variant_size` & `order_items.variant_size` menyimpan ukuran.
+  Kunci stok per kombinasi memakai `variant_key(color,size)` = `"Hitam|M"`;
+  keranjang unik per `(user_id, product_id, coalesce(variant_color,''), coalesce(variant_size,''))`.
+  `variant_available` / `variant_apply` mencari kunci gabungan → warna saja →
+  ukuran saja → stok total, sehingga data varian warna lama tetap kompatibel.
+- **Migrasi:** `supabase/migrations/20261120_product_sizes_hex.sql` (idempoten).
+  Bila belum dijalankan, admin menampilkan pesan 42703 dan keranjang tetap jalan
+  (kolom varian hanya ditulis bila ada nilai).
+- **i18n:** `src/lib/i18n/dictionaries.ts` (12 bahasa, `MessageKey`), provider
+  klien (`provider.tsx`, `useI18n` / `useOptionalI18n`), pembaca server
+  (`server.ts`, `getTranslator`). Locale disimpan di cookie `xvs_locale`.
+  Bahasa selain id/en hanya memuat subset kunci — sisanya jatuh ke en lalu id.
+- **Layout mobile:** `bottom-nav.tsx` (Beranda, Katalog, Keranjang→drawer,
+  Profil; `md:hidden`, `env(safe-area-inset-bottom)`), `brand-logo.tsx`
+  (`BrandLogo`, `BrandWordmark`), `footer.tsx` ("©2026 X-VIBE SHOP. design by alpha"),
+  `language-switcher.tsx`. Layout toko di `src/app/(shop)/layout.tsx` menambah
+  `pb-20 md:pb-0` agar konten tidak tertutup bottom nav.
+- **PWA:** `public/manifest.json`, `public/sw.js` (network-first + fallback
+  `/offline`), ikon `public/icon-{192,512}.png` + `apple-touch-icon.png` +
+  `favicon.png` (dibuat dari SVG via `sharp`), splash di `src/app/layout.tsx`,
+  pendaftaran SW di `src/components/layout/pwa-register.tsx`, halaman
+  `src/app/offline/page.tsx`.
+- **Admin:** `admin-sidebar.tsx` (sidebar + tab mobile, status aktif),
+  `variant-editor.tsx` (warna + color picker hex + ukuran + matriks stok
+  warna×ukuran), `product-images-uploader.tsx` (drag & drop multi-foto),
+  `order-table.tsx` (cari/filter + ubah status 3 tahap: Menunggu, Dikirim,
+  Diterima).
+- **Util varian:** `src/lib/variants.ts` (`variantKey`, `variantStock`,
+  `variantLabel`, `colorSwatch`).
+
+## STATUS: Perombakan UI/UX mobile + varian warna×ukuran (MENUNGGU MIGRASI DB)
+
+**Kondisi:** kode SELESAI, ter-build, ter-lint. Tinggal menjalankan
+`supabase/migrations/20261120_product_sizes_hex.sql` di Supabase SQL Editor
+(idempoten; tidak ada kredensial DB di repo/agen). Setelah migrasi dijalankan,
+semua fitur varian warna+ukuran aktif tanpa deploy ulang. Sampai saat itu admin
+gagal menyimpan varian (pesan 42703) dan keranjang berjalan tanpa varian ukuran.
