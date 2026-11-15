@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ProfileForm } from "@/components/profile/profile-form";
 import { AvatarUploader } from "@/components/profile/avatar-uploader";
 import { AddressManager } from "@/components/profile/address-manager";
+import { LogoutButton } from "@/components/profile/logout-button";
 import { OrderCard } from "@/components/order-card";
 import { getAddresses, getMyOrders, getProfile } from "@/lib/queries";
 import { createClient } from "@/lib/supabase/server";
@@ -85,6 +86,12 @@ export default async function ProfilePage() {
                   <ShieldCheck className="h-3.5 w-3.5 text-primary" /> Akses admin aktif
                 </p>
               )}
+
+              <div className="my-1 h-px bg-border" />
+              <p className="px-1 text-xs text-muted-foreground">
+                {t("profile.logoutDesc")}
+              </p>
+              <LogoutButton />
             </CardContent>
           </Card>
         </div>
