@@ -152,7 +152,14 @@ export function ProductImagesUploader({
               key={`${src}-${i}`}
               className="group relative h-20 w-20 overflow-hidden rounded-md border border-border bg-muted"
             >
-              <Image src={src} alt={`Foto ${i + 1}`} fill sizes="80px" className="object-cover" />
+              <Image
+                src={src}
+                alt={`Foto ${i + 1}`}
+                fill
+                loading="lazy"
+                sizes="80px"
+                className="object-cover"
+              />
               {i === 0 && (
                 <span className="absolute left-1 top-1 rounded bg-primary px-1 text-[10px] font-medium text-primary-foreground">
                   Utama

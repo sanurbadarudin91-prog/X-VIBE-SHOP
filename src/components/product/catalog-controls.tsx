@@ -1,7 +1,8 @@
 "use client";
 
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { SlidersHorizontal } from "lucide-react";
+import { Loader2, SlidersHorizontal } from "lucide-react";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -17,15 +18,45 @@ export function CatalogControls({ categories }: { categories: string[] }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const [pending, startTransition] = useTransition();
 
-  const activeCategory = searchParams.get("category") ?? "all";
-  const activeSort = searchParams.get("sort") ?? "newest";
+  // Nilai aktif dipakai optimistis agar chip langsung terasa responsif,
+  // lalu disinkronkan kembali dengan URL begitu navigasi selesai.
+  const urlCategory = searchParams.get("category") ?? "all";
+  const urlSort = searchParams.get("sort") ?? "newest";
+  const [activeCategory, setActiveCategory] = useState(urlCategory);
+  const [activeSort, setActiveSort] = useState(urlSort);
+  const isFirst = useRef(true);
+
+  useEffect(() => {
+    if (isFirst.current) {
+      isFirst.current = false;
+      return;
+    }
+    setActiveCategory(urlCategory);
+    setActiveSort(urlSort);
+  }, [urlCategory, urlSort]);
 
   function update(key: string, value: string) {
     const params = new URLSearchParams(searchParams.toString());
     if (value && value !== "all") params.set(key, value);
     else params.delete(key);
-    router.replace(`${pathname}?${params.toString()}`);
+    const query = params.toString();
+    // Navigasi client-side tanpa reload penuh; scroll dipertahankan agar
+    // pengguna tidak "terlempar" ke atas setiap ganti kategori.
+    startTransition(() => {
+      router.replace(`${pathname}${query ? `?${query}` : ""}`, { scroll: false });
+    });
+  }
+
+  function selectCategory(c: string) {
+    setActiveCategory(c);
+    update("category", c);
+  }
+
+  function selectSort(value: string) {
+    setActiveSort(value);
+    update("sort", value);
   }
 
   const allCategories = ["all", ...categories];
@@ -34,7 +65,7 @@ export function CatalogControls({ categories }: { categories: string[] }) {
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex flex-wrap gap-2">
         {allCategories.map((c) => (
-          <button key={c} onClick={() => update("category", c)} aria-pressed={activeCategory === c}>
+          <button key={c} onClick={() => selectCategory(c)} aria-pressed={activeCategory === c}>
             <Badge
               tone={activeCategory === c ? "default" : "muted"}
               className={cn("cursor-pointer transition-colors hover:border-primary/50", activeCategory === c && "cyber-glow")}
@@ -46,10 +77,14 @@ export function CatalogControls({ categories }: { categories: string[] }) {
       </div>
 
       <div className="flex items-center gap-2">
-        <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
+        {pending ? (
+          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-label="Memuat" />
+        ) : (
+          <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
+        )}
         <Select
           value={activeSort}
-          onChange={(e) => update("sort", e.target.value)}
+          onChange={(e) => selectSort(e.target.value)}
           aria-label="Urutkan produk"
           className="w-44"
         >

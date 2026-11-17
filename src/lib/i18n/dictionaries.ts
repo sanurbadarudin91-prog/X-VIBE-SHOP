@@ -98,6 +98,9 @@ export type MessageKey =
   | "product.pickSize"
   | "product.stock"
   | "product.noImage"
+  | "product.addedToast"
+  | "product.quickView"
+  | "product.viewDetail"
   | "cart.title"
   | "cart.empty"
   | "cart.emptyDesc"
@@ -129,7 +132,8 @@ export type MessageKey =
   | "common.close"
   | "common.save"
   | "common.cancel"
-  | "common.search";
+  | "common.search"
+  | "common.processing";
 
 type Dict = Record<MessageKey, string>;
 
@@ -183,6 +187,9 @@ const id: Dict = {
   "product.pickSize": "Silakan pilih ukuran terlebih dahulu.",
   "product.stock": "Stok",
   "product.noImage": "Tanpa gambar",
+  "product.addedToast": "Produk berhasil ditambahkan!",
+  "product.quickView": "Lihat Cepat",
+  "product.viewDetail": "Lihat Detail Lengkap",
   "cart.title": "Keranjang Belanja",
   "cart.empty": "Keranjang Kosong",
   "cart.emptyDesc": "Belum ada produk di keranjang Anda.",
@@ -215,6 +222,7 @@ const id: Dict = {
   "common.save": "Simpan",
   "common.cancel": "Batal",
   "common.search": "Cari",
+  "common.processing": "Memproses…",
 };
 
 const en: Dict = {
@@ -267,6 +275,9 @@ const en: Dict = {
   "product.pickSize": "Please choose a size first.",
   "product.stock": "Stock",
   "product.noImage": "No image",
+  "product.addedToast": "Product added to cart!",
+  "product.quickView": "Quick View",
+  "product.viewDetail": "View Full Details",
   "cart.title": "Shopping Cart",
   "cart.empty": "Your Cart is Empty",
   "cart.emptyDesc": "There are no items in your cart yet.",
@@ -299,6 +310,7 @@ const en: Dict = {
   "common.save": "Save",
   "common.cancel": "Cancel",
   "common.search": "Search",
+  "common.processing": "Processing…",
 };
 
 /** Terjemahan lengkap untuk tiap bahasa yang didukung. */

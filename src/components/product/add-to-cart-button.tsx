@@ -29,7 +29,7 @@ export function AddToCartButton({
 }) {
   const router = useRouter();
   const { t } = useOptionalI18n();
-  const { refresh, setOpen } = useCart();
+  const { refresh } = useCart();
   const [pending, startTransition] = useTransition();
   const [done, setDone] = useState(false);
 
@@ -49,8 +49,9 @@ export function AddToCartButton({
         router.push("/checkout");
         return;
       }
-      toast.success(res.message);
-      setOpen(true);
+      // Umpan balik visual cukup lewat toast (auto-hilang 2 detik) agar tidak
+      // menumpuk dengan drawer keranjang.
+      toast.success(t("product.addedToast"), { duration: 2000 });
       setDone(true);
       setTimeout(() => setDone(false), 1200);
     });

@@ -52,23 +52,51 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       asChild,
       children,
       disabled,
+      onClick,
       ...props
     },
     ref,
   ) => {
     // asChild: render ke elemen anak (mis. <Link>) agar tidak ada <button> di
-    // dalam <a>.
+    // dalam <a>. onClick dan status loading diteruskan ke anak hanya bila perlu,
+    // supaya tetap aman dipakai dari Server Component.
     if (asChild && React.isValidElement(children)) {
-      const child = children as React.ReactElement<{ className?: string }>;
-      return React.cloneElement(child, {
+      const child = children as React.ReactElement<{
+        className?: string;
+        children?: React.ReactNode;
+        onClick?: (e: React.MouseEvent<Element>) => void;
+      }>;
+      const blocked = Boolean(disabled || loading);
+      const nextProps: Record<string, unknown> = {
         className: buttonClasses(cn(child.props.className, className), variant, size),
-      });
+      };
+      if (onClick || blocked) {
+        nextProps["aria-disabled"] = blocked || undefined;
+        nextProps.onClick = (e: React.MouseEvent<Element>) => {
+          if (blocked) {
+            e.preventDefault();
+            return;
+          }
+          child.props.onClick?.(e);
+          onClick?.(e as React.MouseEvent<HTMLButtonElement>);
+        };
+      }
+      if (loading) {
+        nextProps.children = (
+          <>
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+            {child.props.children}
+          </>
+        );
+      }
+      return React.cloneElement(child, nextProps);
     }
 
     return (
       <button
         ref={ref}
         disabled={disabled || loading}
+        onClick={onClick}
         className={buttonClasses(className, variant, size)}
         {...props}
       >

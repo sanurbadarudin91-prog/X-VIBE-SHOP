@@ -48,7 +48,14 @@ export function ProductGallery({
               )}
             >
               {src && (
-                <Image src={src} alt="" fill sizes="64px" className="object-cover" />
+                <Image
+                  src={src}
+                  alt=""
+                  fill
+                  loading="lazy"
+                  sizes="64px"
+                  className="object-cover"
+                />
               )}
             </button>
           ))}

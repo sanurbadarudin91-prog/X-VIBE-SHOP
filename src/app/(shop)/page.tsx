@@ -73,8 +73,6 @@ export default async function HomePage() {
             </Button>
           </div>
         </div>
-        <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-primary/30 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-20 right-24 h-48 w-48 rounded-full bg-accent/20 blur-3xl" />
       </section>
 
       <section className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
