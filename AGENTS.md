@@ -241,3 +241,19 @@ serta `create_order`/`apply_stock_delta` sadar varian sudah aktif.
   **di luar `<a>`** gambar (dulu sempat bersarang di dalam `<a>` = HTML tidak
   valid + memicu navigasi).
 
+## STATUS: Perbaikan UX checkout + Quick View (SELESAI, DEPLOY PRODUKSI)
+
+**Kondisi:** SELESAI dan **sudah live di produksi** (2026-11-17). PR #7
+di-merge ke `main` (merge commit `62631f3`); deploy Vercel produksi untuk
+commit itu `READY`; `npm run check:deploy` 8/8 rute lolos; uji end-to-end di
+produksi (login → Quick View → tambah keranjang → filter kategori → drawer →
+checkout → buat pesanan) lulus tanpa error konsol.
+
+- **Pelajaran uji:** saat menguji filter kategori di produksi, **jangan hitung
+  kartu tepat setelah klik** — grid di-*swap* oleh Suspense sehingga sesaat
+  bisa terbaca 0 kartu (false negative). Tunggu hingga URL berisi `?category=`
+  **dan** grid stabil (mis. tunggu 2 detik) sebelum menghitung ulang.
+- **Catatan:** `main` adalah branch produksi Vercel; merge PR ke `main` memicu
+  deploy produksi otomatis (tidak perlu `vercel --prod`).
+
+
