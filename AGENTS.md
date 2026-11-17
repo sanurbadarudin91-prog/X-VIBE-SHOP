@@ -206,3 +206,38 @@ Supabase** (2026-11-15): kolom `products.color_hex`, `products.sizes`,
 `cart_items.variant_size`, `order_items.variant_size`, indeks unik keranjang
 per warna+ukuran, dan fungsi `variant_key`/`variant_available`/`variant_apply`
 serta `create_order`/`apply_stock_delta` sadar varian sudah aktif.
+
+## Perbaikan UX: alur checkout, performa ringan, Quick View (2026-11)
+
+- **Bug penting `Button asChild`:** cabang `asChild` di
+  `src/components/ui/button.tsx` sebelumnya hanya menyalin `className` dan
+  **membuang `onClick`** — karena itu tombol Checkout di drawer (yang memakai
+  `<Button asChild onClick=...><Link/></Button>`) tidak menutup drawer. Kini
+  `asChild` meneruskan `onClick` + status `loading` ke anak, tapi **hanya
+  menyuntikkan handler bila `onClick`/`disabled`/`loading` memang diberikan**,
+  supaya `Button asChild` tetap aman dipakai dari Server Component (mis.
+  `/offline`) — menambah handler JSX dari server memicu error prerender
+  "Event handlers cannot be passed to Client Component props".
+- **Drawer keranjang:** tombol "Lanjut ke Checkout" memanggil `goToCheckout()`
+  (`setOpen(false)` lalu `router.push("/checkout")`) sehingga drawer tertutup
+  seketika sebelum pindah halaman. Tombol "Keranjang Belanja" tetap `<Link>` +
+  `onClick` tutup.
+- **Toast tambah ke keranjang:** `AddToCartButton` menampilkan toast
+  `product.addedToast` berdurasi 2000 ms dan **tidak** lagi membuka drawer
+  otomatis (dulu drawer + toast menumpuk = dua lapisan sekaligus).
+- **Validasi checkout:** `checkout-client.tsx` memvalidasi nama penerima,
+  nomor WhatsApp (regex `^(0|62)\d{8,13}$`), alamat, kota, kode pos; pesan
+  error tampil sebagai `role="alert"` merah di kartu alamat. Tombol "Buat
+  Pesanan" menampilkan "Memproses…" saat pending.
+- **Performa ringan:** semua `<Image>` pakai `loading="lazy"` + `sizes`;
+  `blur-3xl` hero dihapus; `backdrop-blur` di overlay drawer/modal/kartu
+  dihapus (sisakan blur navbar saja); nilai context `CartProvider`
+  di-memoize + `refresh` pakai `useCallback`.
+- **Filter katalog & Quick View:** `catalog-controls.tsx` memakai state
+  optimistis + `router.replace(..., { scroll: false })` agar ganti kategori
+  tidak melompat ke atas dan terasa instan. `src/components/product/quick-view.tsx`
+  menambah tombol "Lihat Cepat" di kartu produk → modal pratinjau dengan pilih
+  varian + tambah ke keranjang tanpa meninggalkan katalog. Tombol quick view
+  **di luar `<a>`** gambar (dulu sempat bersarang di dalam `<a>` = HTML tidak
+  valid + memicu navigasi).
+

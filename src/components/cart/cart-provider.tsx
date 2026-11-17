@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { CartItem } from "@/lib/types";
 
@@ -26,7 +26,7 @@ export function CartProvider({
 
   const count = items.reduce((sum, i) => sum + i.quantity, 0);
 
-  async function refresh() {
+  const refresh = useCallback(async () => {
     const supabase = createClient();
     const {
       data: { user },
@@ -41,17 +41,18 @@ export function CartProvider({
       .eq("user_id", user.id)
       .order("created_at", { ascending: true });
     setItems((data as CartItem[]) ?? []);
-  }
+  }, []);
 
   useEffect(() => {
     setItems(initialItems);
   }, [initialItems]);
 
-  return (
-    <CartContext.Provider value={{ items, count, open, setOpen, refresh }}>
-      {children}
-    </CartContext.Provider>
+  const value = useMemo(
+    () => ({ items, count, open, setOpen, refresh }),
+    [items, count, open, refresh],
   );
+
+  return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 }
 
 export function useCart() {

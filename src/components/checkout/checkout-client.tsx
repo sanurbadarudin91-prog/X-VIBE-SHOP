@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CreditCard, Landmark, QrCode, Wallet } from "lucide-react";
+import { AlertCircle, CreditCard, Landmark, QrCode, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -39,6 +39,7 @@ export function CheckoutClient({
   );
   const [selectedVoucherId, setSelectedVoucherId] = useState<string | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("bank_transfer");
+  const [addressError, setAddressError] = useState<string | null>(null);
 
   const [result, setResult] = useState<{
     orderId: string;
@@ -54,21 +55,39 @@ export function CheckoutClient({
   const discount = computeDiscount(subtotal, selectedVoucher);
   const total = Math.max(subtotal - discount, 0);
 
+  /** Validasi data pengiriman sebelum membuat pesanan. */
+  function validateAddress(address: Address | undefined): string | null {
+    if (!address) return "Pilih alamat pengiriman terlebih dahulu.";
+    if (!address.recipient_name?.trim()) return "Nama penerima wajib diisi.";
+    const digits = address.phone_number.replace(/\D/g, "");
+    if (!digits) return "Nomor WhatsApp wajib diisi.";
+    if (!/^(0|62)\d{8,13}$/.test(digits))
+      return "Nomor WhatsApp tidak valid (contoh: 081234567890).";
+    if (!address.street_address?.trim())
+      return "Alamat lengkap wajib diisi.";
+    if (!address.city?.trim()) return "Kota wajib diisi.";
+    if (!address.postal_code?.trim()) return "Kode pos wajib diisi.";
+    return null;
+  }
+
   function placeOrder() {
     const address = addresses.find((a) => a.id === selectedAddressId);
-    if (!address) {
-      toast.error("Pilih alamat pengiriman terlebih dahulu.");
+    const error = validateAddress(address);
+    if (error) {
+      setAddressError(error);
+      toast.error(error);
       return;
     }
+    setAddressError(null);
 
     startTransition(async () => {
       const res = await createOrder({
         address: {
-          recipient_name: address.recipient_name,
-          phone_number: address.phone_number,
-          street_address: address.street_address,
-          city: address.city,
-          postal_code: address.postal_code,
+          recipient_name: address!.recipient_name,
+          phone_number: address!.phone_number,
+          street_address: address!.street_address,
+          city: address!.city,
+          postal_code: address!.postal_code,
         },
         userVoucherId: selectedVoucherId,
         paymentMethod,
@@ -127,7 +146,10 @@ export function CheckoutClient({
                     name="address"
                     className="mt-1"
                     checked={selectedAddressId === a.id}
-                    onChange={() => setSelectedAddressId(a.id)}
+                    onChange={() => {
+                      setSelectedAddressId(a.id);
+                      setAddressError(null);
+                    }}
                   />
                   <div>
                     <div className="flex items-center gap-2">
@@ -141,6 +163,14 @@ export function CheckoutClient({
                   </div>
                 </label>
               ))}
+              {addressError && (
+                <p
+                  role="alert"
+                  className="flex items-center gap-1.5 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+                >
+                  <AlertCircle className="h-4 w-4 shrink-0" /> {addressError}
+                </p>
+              )}
             </CardContent>
           </Card>
 
@@ -262,7 +292,8 @@ export function CheckoutClient({
             <span className="text-primary">{formatIDR(total)}</span>
           </div>
           <Button className="mt-5 w-full" loading={pending} onClick={placeOrder}>
-            <CreditCard className="h-4 w-4" /> Buat Pesanan
+            {!pending && <CreditCard className="h-4 w-4" />}
+            {pending ? "Memproses…" : "Buat Pesanan"}
           </Button>
           <p className="mt-2 text-center text-xs text-muted-foreground">
             Pembayaran masih berupa simulasi (placeholder gateway).

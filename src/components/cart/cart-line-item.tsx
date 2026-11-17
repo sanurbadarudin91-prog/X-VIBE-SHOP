@@ -53,7 +53,14 @@ export function CartLineItem({ item }: { item: CartItem }) {
     <div className="flex gap-3 rounded-2xl border border-border bg-card p-3">
       <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-muted">
         {p?.image_url && (
-          <Image src={p.image_url} alt={p.title} fill sizes="80px" className="object-cover" />
+          <Image
+            src={p.image_url}
+            alt={p.title}
+            fill
+            loading="lazy"
+            sizes="80px"
+            className="object-cover"
+          />
         )}
       </div>
 

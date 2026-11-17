@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Minus, Plus, ShoppingBag, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -15,10 +16,12 @@ import {
 } from "@/lib/actions/cart";
 
 export function CartDrawer() {
+  const router = useRouter();
   const { items, open, setOpen, refresh } = useCart();
   const { t } = useOptionalI18n();
   const [pending, startTransition] = useTransition();
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [checkingOut, setCheckingOut] = useState(false);
 
   const subtotal = items.reduce(
     (sum, i) => sum + Number(i.products?.price ?? 0) * i.quantity,
@@ -46,12 +49,20 @@ export function CartDrawer() {
     });
   }
 
+  // Tutup drawer lebih dulu agar tidak ada dua lapisan aktif menumpuk, lalu
+  // arahkan ke halaman checkout.
+  function goToCheckout() {
+    setCheckingOut(true);
+    setOpen(false);
+    router.push("/checkout");
+  }
+
   if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in"
+        className="absolute inset-0 bg-black/70 animate-fade-in"
         onClick={() => setOpen(false)}
       />
       <aside className="relative z-10 flex h-full w-full max-w-md flex-col border-l border-border bg-background shadow-2xl animate-slide-in">
@@ -88,6 +99,7 @@ export function CartDrawer() {
                           src={p.image_url}
                           alt={p.title}
                           fill
+                          loading="lazy"
                           sizes="80px"
                           className="object-cover"
                         />
@@ -163,10 +175,10 @@ export function CartDrawer() {
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <Button asChild variant="outline" onClick={() => setOpen(false)}>
-                  <Link href="/cart">Lihat Keranjang</Link>
+                  <Link href="/cart">{t("cart.title")}</Link>
                 </Button>
-                <Button asChild onClick={() => setOpen(false)}>
-                  <Link href="/checkout">Checkout</Link>
+                <Button loading={checkingOut} onClick={goToCheckout}>
+                  {checkingOut ? t("common.processing") : t("cart.checkout")}
                 </Button>
               </div>
             </div>

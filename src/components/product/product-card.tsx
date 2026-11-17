@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { AddToCartButton } from "@/components/product/add-to-cart-button";
+import { QuickViewButton } from "@/components/product/quick-view";
 import { colorSwatch } from "@/lib/variants";
 import { formatIDR } from "@/lib/utils";
 import type { Product } from "@/lib/types";
@@ -16,35 +17,43 @@ export function ProductCard({ product }: { product: Product }) {
 
   return (
     <Card className="group flex flex-col overflow-hidden rounded-2xl border-border/70 transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-lg">
-      <Link
-        href={`/products/${product.id}`}
-        className="relative block aspect-[4/5] overflow-hidden bg-muted"
-      >
-        {product.image_url ? (
-          <Image
-            src={product.image_url}
-            alt={product.title}
-            fill
-            sizes="(max-width: 768px) 50vw, 25vw"
-            className="object-cover transition-transform duration-500 group-hover:scale-105"
-          />
-        ) : (
-          <div className="grid h-full place-items-center text-xs text-muted-foreground">
-            Tanpa gambar
-          </div>
-        )}
+      <div className="relative aspect-[4/5] overflow-hidden bg-muted">
+        <Link
+          href={`/products/${product.id}`}
+          className="block h-full w-full"
+          aria-label={product.title}
+        >
+          {product.image_url ? (
+            <Image
+              src={product.image_url}
+              alt={product.title}
+              fill
+              loading="lazy"
+              sizes="(max-width: 768px) 50vw, 25vw"
+              className="object-cover transition-transform duration-500 group-hover:scale-105"
+            />
+          ) : (
+            <div className="grid h-full place-items-center text-xs text-muted-foreground">
+              Tanpa gambar
+            </div>
+          )}
+        </Link>
 
         {outOfStock && (
-          <span className="absolute inset-0 grid place-items-center bg-background/70 text-xs font-semibold uppercase tracking-wide text-muted-foreground backdrop-blur-[1px]">
+          <span className="pointer-events-none absolute inset-0 grid place-items-center bg-background/70 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Stok Habis
           </span>
         )}
         {!outOfStock && product.stock <= 5 && (
-          <span className="absolute left-2 top-2 rounded-full bg-amber-500/90 px-2 py-0.5 text-[10px] font-bold text-black">
+          <span className="pointer-events-none absolute left-2 top-2 rounded-full bg-amber-500/90 px-2 py-0.5 text-[10px] font-bold text-black">
             Sisa {product.stock}
           </span>
         )}
-      </Link>
+
+        <span className="absolute inset-x-0 bottom-2 flex justify-center">
+          <QuickViewButton product={product} />
+        </span>
+      </div>
 
       <div className="flex flex-1 flex-col gap-1.5 p-3">
         <Link

@@ -157,6 +157,7 @@ export function OrderCard({
                     src={item.products.image_url}
                     alt={item.products.title ?? ""}
                     fill
+                    loading="lazy"
                     sizes="48px"
                     className="object-cover"
                   />
